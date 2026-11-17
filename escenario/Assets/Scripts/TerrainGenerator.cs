@@ -39,15 +39,26 @@ public class TerrainGenerator : MonoBehaviour
         }
     }
 
+    // =====================================
+    // GENERAR TERRENO
+    // =====================================
+
     [ContextMenu("Generar terreno")]
     public void GenerateTerrain()
     {
         resolution = Mathf.Max(32, resolution);
         gridCells = Mathf.Max(1, gridCells);
+        worldSize = Mathf.Max(0.01f, worldSize);
 
         spriteRenderer = GetComponent<SpriteRenderer>();
 
         heights = new float[resolution, resolution];
+
+        // Eliminar textura anterior
+        if (terrainTexture != null)
+        {
+            Destroy(terrainTexture);
+        }
 
         // Crear textura
         terrainTexture = new Texture2D(
@@ -73,11 +84,6 @@ public class TerrainGenerator : MonoBehaviour
         }
 
         // SEGUNDA FASE: generar representacion visual
-        int cellSize = Mathf.Max(
-            1,
-            resolution / gridCells
-        );
-
         for (int y = 0; y < resolution; y++)
         {
             for (int x = 0; x < resolution; x++)
@@ -86,7 +92,7 @@ public class TerrainGenerator : MonoBehaviour
 
                 Color color = GetTerrainColor(h);
 
-                // Curvas topograficas
+                // CURVAS TOPOGRAFICAS
                 if (showContours)
                 {
                     float level = h * 12f;
@@ -99,16 +105,42 @@ public class TerrainGenerator : MonoBehaviour
                     }
                 }
 
-                // Cuadricula visual
-                if (showGrid &&
-                    (x % cellSize == 0 ||
-                     y % cellSize == 0))
+                // CUADRICULA VISUAL ALINEADA
+                if (showGrid)
                 {
-                    color = Color.Lerp(
-                        color,
-                        Color.black,
-                        0.12f
-                    );
+                    // Centro del pixel en coordenadas normalizadas
+                    float u = (x + 0.5f) / resolution;
+                    float v = (y + 0.5f) / resolution;
+
+                    // Posicion respecto a las divisiones de la cuadrícula
+                    float gridX = u * gridCells;
+                    float gridY = v * gridCells;
+
+                    float nearestX = Mathf.Round(gridX);
+                    float nearestY = Mathf.Round(gridY);
+
+                    // Tolerancia equivalente a medio pixel
+                    float tolerance =
+                        0.5f * gridCells / resolution;
+
+                    bool verticalLine =
+                        nearestX > 0 &&
+                        nearestX < gridCells &&
+                        Mathf.Abs(gridX - nearestX) <= tolerance;
+
+                    bool horizontalLine =
+                        nearestY > 0 &&
+                        nearestY < gridCells &&
+                        Mathf.Abs(gridY - nearestY) <= tolerance;
+
+                    if (verticalLine || horizontalLine)
+                    {
+                        color = Color.Lerp(
+                            color,
+                            Color.black,
+                            0.12f
+                        );
+                    }
                 }
 
                 terrainTexture.SetPixel(x, y, color);
@@ -117,7 +149,7 @@ public class TerrainGenerator : MonoBehaviour
 
         terrainTexture.Apply();
 
-        // Crear sprite
+        // CREAR SPRITE
         Sprite terrainSprite = Sprite.Create(
             terrainTexture,
             new Rect(0, 0, resolution, resolution),
@@ -188,7 +220,10 @@ public class TerrainGenerator : MonoBehaviour
         return Mathf.Clamp01(height);
     }
 
-    // Crear monticulos
+    // =====================================
+    // CREAR MONTICULOS
+    // =====================================
+
     private float Hill(
         float x,
         float y,
@@ -271,7 +306,7 @@ public class TerrainGenerator : MonoBehaviour
     }
 
     // =====================================
-    // CONSULTAR PENDIENTE EN GRADOS
+    // CONSULTAR PENDIENTE
     // =====================================
 
     public float GetSlope(float x, float y)
@@ -300,7 +335,7 @@ public class TerrainGenerator : MonoBehaviour
     }
 
     // =====================================
-    // CONSULTAR DATOS DESDE UNITY
+    // CONSULTAR DATOS DEL TERRENO
     // =====================================
 
     public bool GetTerrainData(

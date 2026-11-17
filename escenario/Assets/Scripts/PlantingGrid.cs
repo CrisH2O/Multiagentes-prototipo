@@ -49,8 +49,9 @@ public class PlantingGrid : MonoBehaviour
             return;
         }
 
-        if (gridCells < 1)
-            gridCells = 1;
+        // Utilizar exactamente las mismas celdas
+        // que el generador del terreno.
+        gridCells = Mathf.Max(1, terrain.gridCells);
 
         // Eliminar elementos anteriores
         for (int i = transform.childCount - 1; i >= 0; i--)
@@ -76,6 +77,7 @@ public class PlantingGrid : MonoBehaviour
         {
             for (int y = 0; y < gridCells; y++)
             {
+                // CENTRO EXACTO DE CADA CELDA
                 float worldX = origin.x
                     - terrain.worldSize / 2f
                     + (x + 0.5f) * cellSize;
@@ -122,7 +124,7 @@ public class PlantingGrid : MonoBehaviour
 
                 if (blocked[x, y])
                 {
-                    // Obstaculo oscuro
+                    // OBSTACULO
                     sr.sprite = squareSprite;
 
                     sr.color = new Color(
@@ -141,7 +143,7 @@ public class PlantingGrid : MonoBehaviour
                 }
                 else
                 {
-                    // Punto de plantacion
+                    // PUNTO DE PLANTACION
                     sr.sprite = circleSprite;
 
                     sr.color = plantable[x, y]
@@ -157,8 +159,9 @@ public class PlantingGrid : MonoBehaviour
         }
 
         Debug.Log(
-            "Cuadricula generada. Obstaculos: "
-            + obstacleCount
+            "Cuadricula generada correctamente. " +
+            "Celdas: " + gridCells +
+            " | Obstaculos: " + obstacleCount
         );
     }
 
@@ -217,8 +220,7 @@ public class PlantingGrid : MonoBehaviour
         if (!InsideGrid(x, y))
             return false;
 
-        // El tractor puede atravesar pendientes.
-        // Los obstaculos son los que bloquean el paso.
+        // Los obstaculos bloquean el paso.
         return !blocked[x, y];
     }
 
@@ -253,6 +255,9 @@ public class PlantingGrid : MonoBehaviour
 
     public Vector2 GetPlantingPosition(int x, int y)
     {
+        if (terrain == null)
+            return Vector2.zero;
+
         float cellSize = terrain.worldSize / gridCells;
 
         Vector3 origin = terrain.transform.position;
@@ -272,6 +277,17 @@ public class PlantingGrid : MonoBehaviour
 
     public Vector2 GetRandomWalkablePosition()
     {
+        if (blocked == null)
+        {
+            Debug.LogWarning(
+                "Primero debes generar la cuadrícula."
+            );
+
+            return terrain != null
+                ? terrain.transform.position
+                : Vector2.zero;
+        }
+
         for (int i = 0; i < 1000; i++)
         {
             int x = Random.Range(0, gridCells);
