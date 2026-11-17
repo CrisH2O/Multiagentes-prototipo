@@ -21,6 +21,7 @@ public class PlantingGrid : MonoBehaviour
 
     private bool[,] plantable;
     private bool[,] blocked;
+    private SpriteRenderer[,] cellRenderers;
 
     private Sprite circleSprite;
     private Sprite squareSprite;
@@ -61,6 +62,7 @@ public class PlantingGrid : MonoBehaviour
 
         plantable = new bool[gridCells, gridCells];
         blocked = new bool[gridCells, gridCells];
+        cellRenderers = new SpriteRenderer[gridCells, gridCells];
 
         circleSprite = CreateSprite(true);
         squareSprite = CreateSprite(false);
@@ -121,6 +123,7 @@ public class PlantingGrid : MonoBehaviour
 
                 SpriteRenderer sr =
                     point.AddComponent<SpriteRenderer>();
+                cellRenderers[x, y] = sr;
 
                 if (blocked[x, y])
                 {
@@ -209,6 +212,57 @@ public class PlantingGrid : MonoBehaviour
             return false;
 
         return plantable[x, y] && !blocked[x, y];
+    }
+
+    public void MarkCellPlanted(int x, int y)
+    {
+        if (!InsideGrid(x, y) || blocked[x, y])
+            return;
+
+        SpriteRenderer renderer = cellRenderers[x, y];
+        if (renderer == null)
+            return;
+
+        renderer.color = new Color(1f, 0.85f, 0.1f);
+        renderer.transform.localScale =
+            Vector3.one * (markerSize * 1.35f);
+        renderer.sortingOrder = 3;
+    }
+
+    public float[,] GetElevationMatrix()
+    {
+        float[,] elevations = new float[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+            {
+                float elevation;
+                float slope;
+                Vector2 position = GetPlantingPosition(x, y);
+                elevations[x, y] =
+                    terrain.GetTerrainData(
+                        position,
+                        out elevation,
+                        out slope)
+                    ? elevation
+                    : 0f;
+            }
+        }
+
+        return elevations;
+    }
+
+    public int[,] GetObstacleMatrix()
+    {
+        int[,] obstacles = new int[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+                obstacles[x, y] = blocked[x, y] ? 1 : 0;
+        }
+
+        obstacles[0, 0] = 0;
+        return obstacles;
     }
 
     // =====================================

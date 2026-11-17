@@ -218,6 +218,16 @@ public class GameSetupMenu : MonoBehaviour
         SpawnAgents();
 
         simulationStarted = true;
+
+        AgentSimulationBridge bridge =
+            GetComponent<AgentSimulationBridge>();
+        if (bridge == null)
+            bridge = gameObject.AddComponent<AgentSimulationBridge>();
+
+        bridge.StartSimulation(
+            plantingGrid,
+            agentCount,
+            selectedTerrain + 1);
     }
 
     // =====================================
