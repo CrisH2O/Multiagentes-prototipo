@@ -22,7 +22,8 @@ ETIQUETAS = {
     "terreno": "Terreno",
     "flota": "Número de tractores",
     "obstaculos": "Obstáculos",
-    "semillas": "Semillas por tanque",
+    "costales": "Costales por tanque",
+    "estrategia": "Estrategia de ruteo",
 }
 
 
@@ -115,7 +116,7 @@ def main() -> None:
     salida.mkdir(parents=True, exist_ok=True)
 
     generadas = [figura_eficiencia(df, salida)]
-    for escenario in ("terreno", "flota", "obstaculos", "semillas"):
+    for escenario in ("terreno", "flota", "obstaculos", "costales", "estrategia"):
         generadas.append(figura_bloque(df, escenario, salida))
 
     for ruta in generadas:

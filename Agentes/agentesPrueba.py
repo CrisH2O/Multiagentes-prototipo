@@ -6,10 +6,35 @@ import json
 import sys
 import threading
 
+import unidades
+
 
 PENDING_UNITY_CONFIG = None
 CONFIG_LOCK = threading.Lock()
 DIRECTIONS = ((-1, 0), (1, 0), (0, -1), (0, 1))
+
+
+def plan_zigzag(model):
+    """Recorrido en serpiente de todas las celdas sembrables.
+
+    Es la ruta base contra la que se compara la planificación: cubre cada celda
+    una sola vez, fila por fila, alternando el sentido.
+    """
+    plan = []
+    for y in range(model.height):
+        columnas = range(model.width) if y % 2 else range(model.width - 1, -1, -1)
+        for x in columnas:
+            if model.seeded[x][y] == 0:
+                plan.append((x, y))
+    return plan
+
+
+def repartir_plan(plan, n_agentes):
+    """Divide el recorrido en bloques contiguos, uno por tractor."""
+    if n_agentes < 1:
+        raise ValueError("Se requiere al menos un tractor")
+    tamano = -(-len(plan) // n_agentes)  # división hacia arriba
+    return [plan[i * tamano:(i + 1) * tamano] for i in range(n_agentes)]
 
 
 class TractorAgent:
@@ -27,6 +52,10 @@ class TractorAgent:
         self.steps_taken = 0
         self.state = "SEMBRANDO"
         self.target_pos = None
+        # Solo se usa con estrategia "zigzag"
+        planes = getattr(model, "planes_zigzag", None)
+        self.plan = planes[identifier] if planes and identifier < len(planes) else []
+        self.plan_idx = 0
 
     @property
     def pos(self):
@@ -41,7 +70,8 @@ class TractorAgent:
             cost = 1.0 + difference * 0.5 * self.model.difficulty
         else:
             cost = max(0.5, 1.0 + difference * 0.2)
-        return round(cost, 3)
+        # Convierte el costo abstracto a litros reales por paso
+        return round(cost * self.model.fuel_por_paso, 4)
 
     def find_next_step(self, condition):
         occupied = {
@@ -95,6 +125,13 @@ class TractorAgent:
         return path[0] if path else None
 
     def step(self):
+        if self.model.estrategia == "zigzag":
+            self._step_zigzag()
+        else:
+            self._step_greedy()
+
+    def _step_zigzag(self):
+        """Sigue el recorrido en serpiente asignado."""
         if self.state == "TERMINADO":
             return
         if self.model.remaining_to_seed <= 0:
@@ -105,7 +142,69 @@ class TractorAgent:
             abs(self.pos[0] - self.depot_pos[0]) +
             abs(self.pos[1] - self.depot_pos[1])
         )
-        safe_return_fuel = (distance + 2) * (1.0 + 0.5 * self.model.difficulty)
+        safe_return_fuel = (
+            (distance + 2) * (1.0 + 0.5 * self.model.difficulty)
+            * self.model.fuel_por_paso
+        )
+
+        if self.seeds <= 0 or self.fuel <= safe_return_fuel:
+            self.state = "RECARGANDO"
+
+        if self.state == "RECARGANDO":
+            if self.pos == self.depot_pos:
+                self.fuel = self.max_fuel
+                self.seeds = self.max_seeds
+                self.state = "SEMBRANDO"
+                return
+            next_pos = self.find_next_step(lambda p: p == self.depot_pos)
+            if next_pos is not None:
+                self.execute_move(next_pos)
+            return
+
+        # Sembrar donde está parado, si toca
+        if self.model.seeded[self.pos[0]][self.pos[1]] == 0:
+            self.plant(self.pos)
+            if self.model.remaining_to_seed <= 0:
+                self.state = "TERMINADO"
+                return
+
+        # Saltar celdas ya resueltas
+        while (self.plan_idx < len(self.plan)
+               and self.model.seeded[self.plan[self.plan_idx][0]][self.plan[self.plan_idx][1]]):
+            self.plan_idx += 1
+
+        if self.plan_idx >= len(self.plan):
+            # Se acabó el plan pero faltan celdas: terminar con el greedy
+            if self.model.remaining_to_seed > 0:
+                self._step_greedy()
+                return
+            self.state = "TERMINADO"
+            return
+
+        objetivo = self.plan[self.plan_idx]
+        self.target_pos = objetivo
+        next_pos = self.find_next_step(lambda p: p == objetivo)
+        if next_pos is None:
+            self.plan_idx += 1          # inalcanzable: descartar y seguir
+            self.target_pos = None
+            return
+        self.execute_move(next_pos)
+
+    def _step_greedy(self):
+        if self.state == "TERMINADO":
+            return
+        if self.model.remaining_to_seed <= 0:
+            self.state = "TERMINADO"
+            return
+
+        distance = (
+            abs(self.pos[0] - self.depot_pos[0]) +
+            abs(self.pos[1] - self.depot_pos[1])
+        )
+        safe_return_fuel = (
+            (distance + 2) * (1.0 + 0.5 * self.model.difficulty)
+            * self.model.fuel_por_paso
+        )
 
         if self.seeds <= 0 or self.fuel <= safe_return_fuel:
             self.state = "RECARGANDO"
@@ -151,6 +250,8 @@ class TractorAgent:
             self.execute_move(next_pos)
             if self.model.seeded[self.pos[0]][self.pos[1]] == 0:
                 self.plant(self.pos)
+                if self.model.remaining_to_seed <= 0:
+                    self.state = "TERMINADO"
 
     def execute_move(self, destination):
         cost = self.move_cost(self.pos, destination)
@@ -180,6 +281,9 @@ class FarmingModel:
         self.max_seeds = int(parameters["max_seeds"])
         self.wage_per_tick = float(parameters["wage_per_tick"])
         self.cost_per_seed = float(parameters["cost_per_seed"])
+        # Litros que consume avanzar una celda (calibrado: 8.6 L/ha / 123 celdas)
+        self.fuel_por_paso = float(parameters.get("fuel_por_paso", 1.0))
+        self.estrategia = parameters.get("estrategia", "greedy")
         self.elevation = parameters["elevation_map"]
         self.obstacles = parameters["obstacle_map"]
         self.depot = tuple(parameters["depot_pos"])
@@ -199,6 +303,13 @@ class FarmingModel:
             for x in range(self.width)
             for y in range(self.height)
         )
+        # La ruta base en serpiente se calcula una vez, antes de que nadie siembre
+        self.planes_zigzag = []
+        if self.estrategia == "zigzag":
+            self.planes_zigzag = repartir_plan(
+                plan_zigzag(self), parameters["n_agents"]
+            )
+
         self.agents = [
             TractorAgent(self, index, self.depot)
             for index in range(parameters["n_agents"])
@@ -243,6 +354,12 @@ class FarmingModel:
             idle_ticks = idle_ticks + 1 if (
                 previous == current and not self.current_tick_planted
             ) else 0
+            # El fin de la simulación se decide antes de grabar el fotograma,
+            # para que el último frame ya muestre a todos en TERMINADO.
+            terminado = self.remaining_to_seed <= 0 or idle_ticks >= 15
+            if terminado:
+                for agent in self.agents:
+                    agent.state = "TERMINADO"
             self.frames.append({
                 "tick": self.tick,
                 "remaining_cells": self.remaining_to_seed,
@@ -259,9 +376,7 @@ class FarmingModel:
                     for agent in self.agents
                 ],
             })
-            if self.remaining_to_seed <= 0 or idle_ticks >= 15:
-                for agent in self.agents:
-                    agent.state = "TERMINADO"
+            if terminado:
                 break
 
 
@@ -278,10 +393,17 @@ def run_simulation(payload):
         "depot_pos": tuple(payload.get("depot_pos", [0, 0])),
         "elevation_map": elevation,
         "obstacle_map": obstacles,
-        "max_fuel": float(payload.get("max_fuel", 180.0)),
-        "max_seeds": int(payload.get("max_seeds", 35)),
-        "wage_per_tick": float(payload.get("wage_per_tick", 2.5)),
-        "cost_per_seed": float(payload.get("cost_per_seed", 0.5)),
+        # Valores calibrados por defecto (ver INVESTIGACION-AGRICOLA.md):
+        # un tanque = un costal = 1 ha, diésel en litros reales.
+        "max_fuel": float(payload.get("max_fuel", unidades.TANQUE_DIESEL_L)),
+        "max_seeds": int(payload.get("max_seeds", 123)),
+        "wage_per_tick": float(payload.get("wage_per_tick",
+                                          unidades.salario_por_tick())),
+        "cost_per_seed": float(payload.get("cost_per_seed",
+                                           unidades.COSTO_SEMILLA_POR_CELDA)),
+        "fuel_por_paso": float(payload.get("fuel_por_paso",
+                                           unidades.LITROS_POR_CELDA)),
+        "estrategia": str(payload.get("estrategia", "greedy")),
     }
     model = FarmingModel(parameters)
     model.run(int(payload.get("steps", 2000)))

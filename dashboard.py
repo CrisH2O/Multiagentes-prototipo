@@ -54,7 +54,8 @@ PREGUNTAS = {
     "terreno": "¿Cuánto encarece el relieve la misma tarea?",
     "flota": "¿Cuántos tractores conviene mandar antes de que se estorben?",
     "obstaculos": "¿Cuánto degrada un terreno más fragmentado el recorrido?",
-    "semillas": "¿Cuánto cuesta reabastecerse muchas veces?",
+    "costales": "¿Cuánto cuesta reabastecerse muchas veces?",
+    "estrategia": "¿El planificador le gana a la ruta base en serpiente?",
 }
 
 

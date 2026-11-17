@@ -4,10 +4,16 @@
 terreno irregular al menor costo posible, con arquitectura de agentes y
 comunicación explícita.
 
-El sistema responde una pregunta concreta: **¿qué variables de diseño mueven
-de verdad el costo de siembra?** La respuesta, medida en 80 corridas
-controladas, está en [`ANALISIS.md`](ANALISIS.md): la capacidad de semillas
-(2.74× el costo) pesa mucho más que el relieve (2%) o el tamaño de flota (14%).
+El sistema responde una pregunta concreta: **¿qué mueve de verdad el costo y el
+tiempo de siembra?** Con el modelo calibrado en unidades de campo (hectáreas,
+costales y litros), medido en 90 corridas controladas:
+
+- El planificador le gana a la ruta zigzag base: **17% menos tiempo y 3.6% menos costo**.
+- La semilla es el **81% del costo**, y es fija por hectárea.
+- 8 tractores siembran **7.6× más rápido** sin encarecer la operación.
+- El relieve casi no importa (**0.4%**), y eso es una limitación del modelo, no un hallazgo.
+
+Detalle y limitaciones en [`ANALISIS.md`](ANALISIS.md).
 
 ---
 
@@ -27,26 +33,29 @@ el costo de los demás.
 | `grid_size` | Tamaño del terreno en celdas |
 | `difficulty` | 1 plano · 2 colinas · 3 montañoso |
 | `n_agents` | Número de tractores (1–8) |
-| `max_fuel` | Capacidad del tanque |
-| `max_seeds` | Semillas por carga |
-| `wage_per_tick`, `cost_per_seed` | Costos unitarios |
+| `costales` | Capacidad del tanque **en costales** (1 costal ≈ 1 ha ≈ 123 celdas) |
+| `estrategia` | `greedy` (planificador) o `zigzag` (ruta base) |
+| `max_fuel` | Diésel del tanque en litros (300 L por defecto) |
+| `wage_per_tick`, `cost_per_seed` | Costos unitarios, derivados de $50/h y $1,500/costal |
 
 **Salidas**
 
 - `frames[]`: un fotograma por tick con posición, combustible, semillas,
   estado y celdas sembradas de cada tractor.
-- `metrics`: ticks totales, pasos, combustible consumido, costo de salarios,
-  costo de semillas y celdas restantes.
+- `metrics`: ticks, pasos, litros consumidos, costo de salarios y semillas,
+  celdas restantes, y sus equivalentes por hectárea.
 
 **Preguntas de experimentación**
 
-1. ¿Cuánto encarece el relieve la misma tarea?
-2. ¿Cuántos tractores conviene mandar antes de que se estorben?
-3. ¿Cuánto degrada un terreno más fragmentado el recorrido?
-4. ¿Cuánto cuesta reabastecerse muchas veces?
+1. ¿El planificador le gana a la ruta base en serpiente?
+2. ¿Cuánto encarece el relieve la misma tarea?
+3. ¿Cuántos tractores conviene mandar antes de que se estorben?
+4. ¿Cuánto degrada un terreno más fragmentado el recorrido?
+5. ¿Cuánto cuesta reabastecerse muchas veces?
 
 **Simplificaciones declaradas:** no se modela la física del suelo, el clima ni
-sensores; el campo es una rejilla 2D; un tick equivale a un paso de celda.
+sensores; el campo es una rejilla 2D; un tick equivale a un paso de celda
+(≈ 5.4 s).
 
 ---
 
@@ -114,7 +123,7 @@ Agentes/
   escenarios.py       Generación reproducible de terreno y obstáculos
   metricas.py         Colisiones, revisitas, cobertura y costo monetizado
   unidades.py         Conversión a hectáreas, costales y litros/ha
-  tests/              73 tests: dominio, agentes, escenarios, métricas y unidades
+  tests/              91 tests: dominio, agentes, modelo, escenarios, métricas y unidades
   requirements.txt    Dependencias del modelo
 experimentos.py       Diseño experimental -> resultados/experimentos.csv
 figuras.py            Exporta las gráficas del análisis a resultados/figuras/
@@ -136,7 +145,7 @@ Requiere Python ≥ 3.11 y `uv` (recomendado) o `pip`.
 # Entorno
 uv sync
 
-# Tests (73)
+# Tests (91)
 cd Agentes && ../.venv/bin/python -m pytest -q
 
 # Simulación rápida en terminal
@@ -218,12 +227,20 @@ del campo. La equivalencia está fundamentada en
 | 1 tick | **≈ 5.4 s** | avance de 9 m a 6 km/h |
 | Rendimiento | **≈ 4.6 ha/h** | 9 m de ancho × 6 km/h × 85% |
 
-Con eso, un tanque de 35 unidades cubre **0.28 ha** y uno de 60 cubre **0.49 ha**;
-un costal rinde una hectárea completa.
+**El tanque se expresa en costales, no en unidades.** Por defecto un tanque
+lleva **un costal completo = 1 ha = 123 celdas**. Nunca se maneja el número 123
+a mano: `escenarios.construir_payload(costales=1.0)` lo deriva solo.
 
-⚠️ El modelo **no está calibrado**: consume ~240 L/ha frente a los 8.6–10.77 L/ha
-reales. Sus cifras sirven para **comparar configuraciones**, no como costo real
-por hectárea. Es la limitación L8 del análisis.
+Con esa calibración, el modelo queda dentro del orden de magnitud real:
+
+| Concepto | Simulador | Literatura |
+|---|---|---|
+| Combustible en config. nominal | **10.4 – 11.6 L/ha** | 8.6 – 10.77 L/ha |
+| Costo por hectárea sembrada | **$1,803 – $2,067** | ≈ $1,750 – 1,850 |
+
+⚠️ **Calibración parcial (L8):** la semilla está calibrada *por construcción*
+(1 costal = 1 ha), así que el 81% del costo es una identidad, no un resultado.
+El modelo tampoco incluye depreciación de maquinaria ni preparación del terreno.
 
 ## 7. Reproducibilidad
 
@@ -251,15 +268,17 @@ los reproducibles.
 Los resultados completos, con tablas, interpretación, limitaciones y mejoras
 justificadas, están en **[`ANALISIS.md`](ANALISIS.md)**. Resumen:
 
-- **Cobertura 100% y 0 siembras dobles** en las 80 corridas.
-- **La capacidad de semillas domina el costo** (2.74× de 10 a 60 semillas):
-  de **$16,509/ha a $6,013/ha** según el tanque.
-- **3 tractores es el punto de equilibrio**: 8 tractores tardan 2.26× menos
-  pero cuestan 14% más y generan hasta 27 colisiones por corrida.
-- **El terreno casi no discrimina** (2.0% de diferencia): el costo por pendiente
-  no está normalizado por distancia.
-- **34.2% de los pasos repiten tramo**, la ineficiencia sistemática del
-  algoritmo greedy.
+- **Cobertura 100% y 0 siembras dobles** en las 90 corridas.
+- **El planificador le gana a la ruta base**: 176 vs 211 ticks y $1,851 vs
+  $1,920 por hectárea sembrada (17% más rápido, 3.6% más barato).
+- **8 tractores siembran 7.6× más rápido con el mismo costo por hectárea**,
+  a cambio de hasta 21 colisiones por corrida.
+- **El terreno casi no discrimina** (0.4%): el costo por pendiente no está
+  normalizado por distancia.
+- **El tanque de un costal es el punto de equilibrio**: con 0.25 costales el
+  costo sube 11.8% y el combustible 67%.
+- **18.3% de los pasos repiten tramo**; el planificador mejora la línea base
+  (25% → 16%).
 
 ---
 

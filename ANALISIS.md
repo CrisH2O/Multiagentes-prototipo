@@ -2,156 +2,155 @@
 
 Documento de interpretación del simulador multiagente agrícola. Todos los
 números provienen de `resultados/experimentos.csv`, generado con
-`python experimentos.py` (80 corridas: 16 variantes × 5 repeticiones).
+`python experimentos.py` (90 corridas: 18 variantes × 5 repeticiones).
 
-Las equivalencias con el campo (hectáreas, costales, litros por hectárea)
-están fundamentadas en [`INVESTIGACION-AGRICOLA.md`](INVESTIGACION-AGRICOLA.md)
-y se aplican con `Agentes/unidades.py`.
+El modelo está **calibrado en unidades de campo** (hectáreas, costales, litros
+por hectárea) con base en [`INVESTIGACION-AGRICOLA.md`](INVESTIGACION-AGRICOLA.md)
+y `Agentes/unidades.py`.
 
 ---
 
 ## 1. Metodología
 
-**Diseño experimental.** Cuatro bloques que aíslan **una variable a la vez**.
+**Diseño experimental.** Cinco bloques que aíslan **una variable a la vez**.
 El resto de parámetros se mantiene en su valor base:
 
-| Parámetro base | Valor |
-|---|---|
-| Terreno | colinas (dificultad 2) |
-| Tractores | 3 |
-| Obstáculos | 35 |
-| Semillas por tanque | 35 |
-| Grid | 20 × 20 celdas = **3.24 ha** |
-| Precio del combustible | **$27 MXN/L** (investigado, ver §2.5) |
-| Salario | $2.5 por tick por tractor |
-| Costo por semilla | $0.5 |
+| Parámetro base | Valor | De dónde sale |
+|---|---|---|
+| Terreno | colinas (dificultad 2) | — |
+| Tractores | 3 | — |
+| Obstáculos | 35 | — |
+| **Tanque de semilla** | **1 costal ≈ 1 ha ≈ 123 celdas** | costal de 20 kg = 60,000 semillas |
+| **Diésel** | **0.0697 L por celda** (8.6 L/ha) | estudio con monitor SeedStar |
+| Tanque de diésel | 300 L | tractor mediano |
+| **Precio del diésel** | **$27 MXN/L** | PROFECO / SENER 2026 |
+| **Mano de obra** | **$50 MXN/h** → $0.075 por tick | jornal del operador |
+| Grid | 20 × 20 celdas = **3.24 ha** | celda de 9 m (12 surcos × 76 cm) |
 
-**Reproducibilidad.** Cada corrida usa una semilla `1..5`. La semilla fija a la
-vez la elevación del terreno y la posición de los obstáculos
-(`Agentes/escenarios.py`), así que cualquier fila del CSV se puede reconstruir
-exactamente. Los 5 valores por variante permiten reportar desviación estándar.
+**Reproducibilidad.** Cada corrida usa una semilla `1..5`, que fija a la vez el
+terreno y los obstáculos. Cualquier fila del CSV se reconstruye exactamente.
 
-**Garantía de conectividad.** Los obstáculos se colocan de uno en uno y se
-descarta cualquier celda que parta el terreno en islas o encierre el depósito.
+**Dos métricas de costo por hectárea.** Distinguirlas importa:
 
-**Escala física.** Una celda equivale a 9 m × 9 m = 81 m², el ancho de trabajo
-de una sembradora de 12 surcos a 76 cm. El campo completo son **3.24 ha**.
+- **$/ha del lote**: costo total ÷ 3.24 ha (incluye caminos y obstáculos).
+- **$/ha sembrada**: costo total ÷ hectáreas realmente sembradas.
+
+Los obstáculos reducen el área sembrable, así que el costo por hectárea del
+lote baja sin que el sistema sea más eficiente. La métrica honesta es la
+segunda.
 
 ---
 
 ## 2. Resultados
 
-### 2.1 Terreno — el relieve casi no importa
+### 2.1 El resultado principal: el planificador le gana a la ruta base
 
-| Variante | Ticks | Costo total | **Por hectárea** | Combustible |
+| Estrategia | Ticks | **$/ha sembrada** | Combustible | Pasos repetidos |
 |---|---:|---:|---:|---:|
-| Plano | 265 ± 7 | $23,360 ± 674 | **$7,210/ha** | 785 L |
-| Colinas | 265 ± 7 | $23,548 ± 676 | $7,268/ha | 792 L |
-| Montañoso | 265 ± 7 | $23,836 ± 682 | $7,357/ha | 802 L |
+| **Greedy (nuestro)** | **176 ± 5** | **$1,851** | 11.4 L/ha | 16% |
+| Zigzag (línea base) | 211 ± 7 | $1,920 | 13.6 L/ha | 25% |
 
-**Hallazgo:** pasar de plano a montañoso encarece la operación solo **2.0%**,
-con los **mismos ticks** en las tres variantes.
+**Hallazgo:** el planificador es **17% más rápido** y **3.6% más barato** que la
+ruta base en serpiente, con **menos pasos repetidos** (16% vs 25%).
+
+Esto cierra la promesa central de la propuesta: ya existe una comparación
+contra la ruta zigzag con las mismas métricas y los mismos mapas.
+
+> El ahorro en dinero es modesto porque el 81% del costo es semilla, que no
+> cambia con la ruta. **La ventaja real está en el tiempo y el combustible.**
+
+### 2.2 Terreno — el relieve sigue sin importar
+
+| Variante | Ticks | $/ha sembrada | Combustible |
+|---|---:|---:|---:|
+| Plano | 176 ± 5 | $1,849 | 11.3 L/ha |
+| Colinas | 176 ± 5 | $1,851 | 11.4 L/ha |
+| Montañoso | 176 ± 5 | $1,857 | 11.6 L/ha |
+
+**Hallazgo:** de plano a montañoso la diferencia es **0.4%**, con los mismos
+ticks.
 
 **Por qué:** el costo de movimiento usa la *diferencia absoluta de elevación*
-entre celdas contiguas (`agentesPrueba.TractorAgent.move_cost`), sin normalizar
-por pendiente ni por distancia. Al subir y bajar continuamente, los sobrecostos
-de subida se cancelan con los descuentos de bajada. **El modelo no está
-midiendo lo que dice medir** (§5, limitación L1).
+entre celdas contiguas, sin normalizar por pendiente ni distancia. Al subir y
+bajar continuamente, los sobrecostos de subida se cancelan con los descuentos
+de bajada. **El modelo no está midiendo lo que dice medir** (limitación L1).
 
-### 2.2 Tamaño de flota — más tractores saturan la coordinación
+### 2.3 Tamaño de flota — acelera sin encarecer
 
-| Tractores | Ticks | Costo total | **Por hectárea** | Combustible | Colisiones |
-|---:|---:|---:|---:|---:|---:|
-| 1 | 783 ± 23 | $23,211 | $7,164/ha | 780 L | 0 |
-| 2 | 405 ± 9 | $24,009 | $7,410/ha | 807 L | 2 |
-| 3 | 265 ± 7 | $23,548 | $7,268/ha | 792 L | 0 |
-| 5 | 180 ± 11 | $26,460 | $8,167/ha | 890 L | **8** |
-| 8 | 117 ± 5 | $26,921 | **$8,309/ha** | 904 L | **27** |
-
-**Hallazgo:** de 1 a 3 tractores el tiempo cae **2.95×** sin subir el costo. De
-3 a 8 el tiempo cae otra **2.26×**, pero el costo por hectárea sube **14%** y
-las colisiones pasan de 0 a 27.
-
-**Por qué:** el algoritmo es *greedy* — cada tractor va a la celda pendiente más
-cercana sin reservarla de forma definitiva. Con 5+ tractores convergen a la
-misma zona, a la misma vuelta al depósito y a la misma celda de recarga.
-
-**Conclusión:** **3 tractores es el punto de equilibrio**. Añadir máquinas
-acelera la siembra pero destruye la ventaja en costo.
-
-### 2.3 Obstáculos — más fragmentos, más vuelta
-
-| Obstáculos | Ticks | Costo total | **Por hectárea** | Pasos repetidos |
+| Tractores | Ticks | $/ha sembrada | Combustible | Colisiones |
 |---:|---:|---:|---:|---:|
-| 0 | 243 ± 0 | $21,618 | $6,672/ha | 23% |
-| 20 | 260 ± 14 | $23,077 | $7,122/ha | 30% |
-| 50 | 270 ± 10 | $23,644 | $7,298/ha | 32% |
-| 100 | 293 ± 52 | $24,764 | **$7,643/ha** | **44%** |
+| 1 | 518 ± 15 | $1,846 | 11.2 L/ha | 0 |
+| 2 | 271 ± 8 | $1,861 | 11.7 L/ha | 0 |
+| 3 | 176 ± 5 | $1,851 | 11.4 L/ha | 0 |
+| 5 | 104 ± 7 | $1,842 | 11.1 L/ha | 6 |
+| 8 | 68 ± 6 | $1,848 | 11.3 L/ha | **21** |
 
-**Hallazgo:** con 100 obstáculos el costo sube **15%** y los pasos repetidos
-crecen de **23% a 44%**, casi el doble. La desviación estándar también explota
-(±$3,842): el rendimiento se vuelve muy dependiente de la forma del terreno.
+**Hallazgo:** de 1 a 8 tractores el tiempo cae **7.6×** con el costo
+prácticamente **plano** (variación < 1%). El precio a pagar son las
+**colisiones**: de 0 a 21 por corrida.
 
-### 2.4 Capacidad de semillas — el factor dominante
+**Por qué:** en unidades reales, la semilla domina el costo y es la misma sin
+importar cuántos tractores haya. El combustible y el jornal por hectárea son
+casi constantes. Por eso **añadir máquinas compra tiempo, no dinero**.
 
-| Tanque | Ticks | Costo total | **Por hectárea** | Combustible | Cobertura por carga |
-|---:|---:|---:|---:|---:|---:|
-| 10 | 610 ± 13 | **$53,488** | **$16,509/ha** | 1,805 L | 0.08 ha |
-| 20 | 417 ± 83 | $36,823 | $11,365/ha | 1,241 L | 0.16 ha |
-| 35 | 265 ± 7 | $23,548 | $7,268/ha | 792 L | **0.28 ha** |
-| 60 | 219 ± 6 | **$19,482** | **$6,013/ha** | 654 L | **0.49 ha** |
+**Conclusión:** con 8 tractores el sistema se coordina mal (21 colisiones) pero
+el costo no se degrada. El límite práctico lo pone la coordinación, no la
+economía.
 
-**Hallazgo:** pasar de 10 a 60 unidades de tanque reduce el costo **2.74×**
-($16,509 → $6,013 por hectárea).
+### 2.4 Obstáculos — el costo baja, la eficiencia no mejora
 
-**Por qué:** cada recarga implica un viaje de ida y vuelta al depósito *sin
-sembrar*. Con 10 unidades, 364 celdas exigen ~36 viajes; con 60, solo 6. El
-combustible de esos viajes muertos es lo que dispara el costo: 1,805 L contra
-654 L.
+| Obstáculos | Ticks | $/ha del lote | **$/ha sembrada** | Pasos repetidos |
+|---:|---:|---:|---:|---:|
+| 0 | 198 ± 0 | $1,856 | $1,860 | 15% |
+| 20 | 202 ± 12 | $1,787 | $1,886 | 17% |
+| 50 | 164 ± 12 | $1,605 | $1,839 | 17% |
+| 100 | 173 ± 13 | **$1,430** | **$1,913** | **25%** |
 
-**Conclusión:** la decisión con mayor retorno no es la ruta ni el terreno, sino
-**la capacidad de carga**.
+**Hallazgo:** el costo por hectárea *del lote* cae 23% con 100 obstáculos… pero
+es un espejismo: hay **menos hectáreas que sembrar**. Al normalizar por
+hectárea **sembrada**, el costo en realidad **sube** ($1,860 → $1,913) y los
+pasos repetidos pasan de 15% a 25%.
 
-En unidades de campo, un costal de 20 kg rinde ≈ 1 ha ≈ 123 celdas, así que
-**un tanque de 60 unidades cubre 0.49 ha**: medio costal por carga. El tanque
-actual (35) cubre apenas **0.28 ha**, y es la razón por la que el tractor pasa
-la mayor parte del tiempo viajando al depósito.
+**Lección metodológica:** cambiar el denominador cambia la conclusión. Es el
+tipo de trampa que hay que evitar al reportar "costo por hectárea".
 
-### 2.5 El resultado, en unidades de campo
+### 2.5 Capacidad del tanque — importa, pero menos de lo esperado
 
-El campo simulado son **3.24 ha**, que en maíz equivalen a **≈ 3.2 costales de
-semilla de 20 kg** (un costal ≈ 1 ha ≈ 123 celdas). Con eso, el orden de
-magnitud real sería:
+| Costales por tanque | Ticks | $/ha sembrada | Combustible | Pasos repetidos |
+|---:|---:|---:|---:|---:|
+| 0.25 (≈ 0.25 ha) | 271 ± 9 | **$2,036** | 17.4 L/ha | 31% |
+| 0.5 | 210 ± 9 | $1,917 | 13.5 L/ha | 21% |
+| **1.0** | 176 ± 5 | $1,851 | 11.4 L/ha | 16% |
+| 2.0 | 161 ± 8 | **$1,821** | 10.4 L/ha | 13% |
 
-| Concepto | Valor real esperado (3.24 ha) |
-|---|---:|
-| Semilla | ≈ 3.2 costales (≈ $4,800 si el costal está a $1,500) |
-| Diésel de siembra | 28 – 35 L (8.6 – 10.77 L/ha) |
-| Costo de diésel | $752 – $945 |
-| Tiempo de siembra | ≈ 0.7 h (4.6 ha/h) |
-| **Costo de combustible por ha** | **$232 – $291** |
+**Hallazgo:** con un cuarto de costal por tanque el costo sube **11.8%**
+respecto a un tanque lleno, y el combustible **67%** (17.4 vs 10.4 L/ha).
 
-Compárese con lo que reporta el simulador: **$7,268/ha** y **240 L/ha** de
-combustible. La diferencia no es un error de cálculo, es **falta de
-calibración** (§5, L8).
+**Por qué:** cada recarga es un viaje al depósito sin sembrar. Con 0.25 costales
+caben 31 celdas, así que el tractor pasa más tiempo viajando que sembrando.
+
+**Conclusión:** el tanque de **un costal completo** es el punto de equilibrio:
+duplicarlo a dos costales solo ahorra 1.6% más de costo.
 
 ---
 
-## 3. Métricas globales (80 corridas)
+## 3. Métricas globales (90 corridas)
 
 | Métrica | Valor |
 |---|---|
-| Cobertura | **100% en las 80 corridas** |
+| Cobertura | **100% en las 90 corridas** |
 | Siembras dobles | **0** |
-| Colisiones | 59 (22 corridas con al menos una) |
-| Pasos repetidos | **34.2%** de media |
-| Máximo de visitas a una misma celda | **95** |
-| Costo medio por hectárea | **$8,128/ha** |
+| Colisiones | 39 (19 corridas con al menos una) |
+| Pasos repetidos | **18.3%** de media |
+| Máximo de visitas a una misma celda | **7** |
+| Combustible | **9.4 – 18.4 L/ha** (media 11.9) |
+| Costo | **$1,803 – $2,067 por hectárea sembrada** |
 
-**Lectura:** el sistema cumple de forma robusta dos garantías (cubrir todo, no
-sembrar dos veces) y falla sistemáticamente en una (no repetir tramo). El
-máximo de **95 visitas a una sola celda** es la evidencia más cruda de que el
-pathfinding puede entrar en ciclo cuando el objetivo está bloqueado.
+**Validación contra la realidad:** la literatura indica 8.6–10.77 L/ha para
+siembra de maíz. El simulador queda en 10.4–11.6 L/ha en las configuraciones
+razonables (hasta 18.4 L/ha cuando el tanque es de un cuarto de costal). Es una
+**desviación de 3–10%** en el rango operativo normal, y se explica porque el
+modelo incluye los viajes de recarga, que el estudio de campo no mide.
 
 ---
 
@@ -162,9 +161,9 @@ pathfinding puede entrar en ciclo cuando el objetivo está bloqueado.
 | Cubrir todo el terreno | ✅ 100% |
 | No sembrar dos veces | ✅ 0 casos |
 | No chocar con obstáculos | ✅ el BFS evita obstáculos |
-| No chocar entre agentes | ⚠️ 59 colisiones en 80 corridas |
-| No pasar más de una vez por el mismo tramo | ❌ 34.2% de los pasos |
-| Reducir costo frente a zigzag base | ❌ no implementado |
+| No chocar entre agentes | ⚠️ 39 colisiones en 90 corridas |
+| No pasar más de una vez por el mismo tramo | ⚠️ 18.3% de los pasos |
+| **Reducir costo/tiempo frente al zigzag base** | ✅ **17% más rápido, 3.6% más barato** |
 
 ---
 
@@ -176,18 +175,18 @@ desnivel real de 100 m en 9 m de avance cuesta lo mismo que una loma suave.
 Debería usarse pendiente normalizada por distancia.
 
 **L2 — El depósito genera colisiones.** Todos los tractores comparten `(0,0)` y
-el BFS excluye las celdas ocupadas *excepto* el depósito. Se concentra en
-configuraciones con muchas recargas y flotas grandes (8 tractores → 27).
+el BFS excluye las celdas ocupadas *excepto* el depósito. 21 colisiones con 8
+tractores.
 
 **L3 — Repetición de tramos no penalizada.** No hay memoria de celdas ya
-transitadas, solo de celdas sembradas.
+transitadas, solo de celdas sembradas. Sigue en 18.3%.
 
-**L4 — No hay línea base zigzag.** Sin benchmark, la afirmación "ruta óptima"
-no se puede sostener.
+**L4 — La línea base zigzag es única.** Existen rutas base mejores (boustrophedon
+con división por bloques, franjas paralelas); comparar contra una sola favorece
+al planificador.
 
-**L5 — El precio del combustible es un supuesto.** Ahora vale **$27/L**, con
-rango de sensibilidad $25.39–$28.00 (ver investigación). Como el combustible es
-~89% del costo, el ranking no cambia, pero el monto absoluto escala con él.
+**L5 — Precio del diésel supuesto.** $27/L con rango $25.39–$28.00. Como el
+combustible pesa ~17% del costo, un cambio de precio no altera el ranking.
 
 **L6 — La aleatoriedad de Unity no está sembrada.** `PlantingGrid` y
 `TerrainGenerator` usan `Random.Range` sin `InitState`, así que la corrida
@@ -197,54 +196,38 @@ visual del editor no es reproducible. Los experimentos sí lo son.
 inalcanzables, así que "cobertura" no distingue un terreno bien sembrado de uno
 con zonas vedadas.
 
-**L8 — El modelo no está calibrado contra la realidad.** Sus magnitudes son
-internas y coherentes, pero no representan el campo:
-
-| Concepto | Simulador | Realidad | Factor |
-|---|---:|---:|---:|
-| Combustible | 240 L/ha | 8.6 – 10.77 L/ha | **~25×** |
-| Semilla | 364 "unidades" | ~194,400 semillas (3.2 costales) | **~530×** |
-| Salario | $2.5/tick ≈ $1,667/h | ≈ $45–70/h | **~25–35×** |
-| Tiempo (1 tractor) | 783 ticks | ≈ 42 min (467 ticks) | ~1.7× |
-
-Por eso los resultados son válidos **en comparación relativa**, no en pesos
-absolutos por hectárea.
+**L8 — Calibración parcial.** La semilla está calibrada por construcción
+(1 costal = 1 ha), pero **ese 81% del costo no es un resultado del modelo, es
+una identidad**. El combustible sí es un resultado y queda 3–10% arriba de la
+literatura. El modelo **no** captura depreciación de maquinaria, tiempo de
+traslado al lote ni costo de preparación del terreno.
 
 ---
 
 ## 6. Mejoras propuestas (justificadas)
 
 1. **Penalizar la repetición de tramos** (L3). Añadir `costo × (1 + α ×
-   visitas_previas)`. Afecta al 34% de los pasos.
+   visitas_previas)`. Afecta al 18.3% de los pasos.
 2. **Modelar el depósito como recurso** (L2). Cola de recarga o varios puntos.
-   Elimina hasta 27 colisiones por corrida.
+   Elimina hasta 21 colisiones por corrida.
 3. **Normalizar pendiente por distancia** (L1). Convertiría el terreno en una
    variable con efecto real.
-4. **Implementar la línea base zigzag** (L4). Es el benchmark prometido.
+4. **Ampliar la línea base** (L4). Comparar contra franjas paralelas y contra
+   división del campo por zonas.
 5. **Sembrar el RNG de Unity** (L6). `Random.InitState(payload.semilla)`.
-6. **Reemplazar greedy por asignación global** (subasta o reserva de objetivo).
-7. **Calibrar el modelo con el preset realista** (L8). Tanque de 123 unidades
-   (1 costal), 8.6 L/ha y salario por hora real; así las cifras absolutas
-   pasarían a ser defendibles.
+6. **Incorporar costos fijos** (L8). Depreciación y preparación del terreno
+   harían que el costo por hectárea se acerque al valor completo de la labor.
 
 ---
 
 ## 7. Cómo reproducir todo
 
 ```bash
-# 1. Entorno
 uv sync
-
-# 2. Tests (55)
 cd Agentes && ../.venv/bin/python -m pytest -q && cd ..
-
-# 3. Experimentos (≈25 s, genera CSV + fotogramas)
 .venv/bin/python experimentos.py
-
-# 4. Figuras y dashboard
 .venv/bin/python figuras.py
 .venv/bin/python -m streamlit run dashboard.py
 ```
 
-Los resultados corresponden a `resultados/experimentos.csv` (80 filas, 27
-columnas, reproducible byte a byte).
+Resultados: `resultados/experimentos.csv` (90 filas, reproducible byte a byte).

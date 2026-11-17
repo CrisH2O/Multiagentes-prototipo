@@ -45,7 +45,8 @@ BASE = {
     "terreno": "colinas",
     "n_agentes": 3,
     "obstaculos": 35,
-    "max_seeds": 35,
+    "costales": 1.0,        # un tanque = un costal = 1 ha
+    "estrategia": "greedy",
 }
 
 BLOQUES = {
@@ -64,21 +65,27 @@ BLOQUES = {
         "pregunta": "¿Cuánto degrada un terreno más fragmentado el recorrido?",
         "variantes": [{"obstaculos": k} for k in (0, 20, 50, 100)],
     },
-    "semillas": {
-        "variable": "max_seeds",
+    "costales": {
+        "variable": "costales",
         "pregunta": "¿Cuánto cuesta reabastecerse muchas veces?",
-        "variantes": [{"max_seeds": k} for k in (10, 20, 35, 60)],
+        "variantes": [{"costales": k} for k in (0.25, 0.5, 1.0, 2.0)],
+    },
+    "estrategia": {
+        "variable": "estrategia",
+        "pregunta": "¿El planificador le gana a la ruta base en serpiente?",
+        "variantes": [{"estrategia": "greedy"}, {"estrategia": "zigzag"}],
     },
 }
 
 COLUMNAS = [
     "escenario", "variante", "repeticion", "semilla",
-    "grid", "terreno", "n_agentes", "obstaculos", "max_seeds",
+    "grid", "terreno", "n_agentes", "obstaculos", "costales", "estrategia",
     "ticks", "pasos", "combustible_l", "costo_salarios", "costo_semillas",
     "costo_total", "cobertura", "colisiones", "pasos_repetidos",
     "ratio_repeticion", "max_visitas_celda", "celdas_sembradas",
     "siembras_dobles", "celdas_restantes",
     "area_ha", "costo_ha", "combustible_ha", "costales_semilla",
+    "area_sembrada_ha", "costo_ha_sembrada",
 ]
 
 
@@ -91,7 +98,8 @@ def corrida(config: dict, semilla: int, grid: int, precio_litro: float,
         n_agentes=config["n_agentes"],
         obstaculos=config["obstaculos"],
         semilla=semilla,
-        max_seeds=config["max_seeds"],
+        costales=config["costales"],
+        estrategia=config["estrategia"],
     )
 
     inicio = time.perf_counter()
@@ -113,6 +121,12 @@ def corrida(config: dict, semilla: int, grid: int, precio_litro: float,
     resumen["costales_semilla"] = round(
         unidades.costales_de_celdas(resumen["celdas_sembradas"]), 2
     )
+    # Costo normalizado por hectárea realmente sembrada: los obstáculos
+    # reducen el área útil, así que el costo por hectárea del lote baja sin
+    # que el sistema sea más eficiente.
+    area_util = unidades.hectareas(resumen["celdas_sembradas"])
+    resumen["area_sembrada_ha"] = round(area_util, 4)
+    resumen["costo_ha_sembrada"] = round(resumen["costo_total"] / area_util, 2)
 
     # El tiempo de reloj queda fuera de los resultados: si se guardara en el
     # CSV o en el JSON, dos corridas idénticas parecerían distintas.
@@ -186,7 +200,8 @@ def main() -> int:
                     "terreno": config["terreno"],
                     "n_agentes": config["n_agentes"],
                     "obstaculos": config["obstaculos"],
-                    "max_seeds": config["max_seeds"],
+                    "costales": config["costales"],
+                    "estrategia": config["estrategia"],
                     **resumen,
                 })
 

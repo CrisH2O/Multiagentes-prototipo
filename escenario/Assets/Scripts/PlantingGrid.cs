@@ -16,6 +16,10 @@ public class PlantingGrid : MonoBehaviour
     [Header("OBSTACULOS")]
     public int obstacleCount = 35;
 
+    [Header("REPRODUCIBILIDAD")]
+    // Con la misma semilla se obtienen los mismos obstaculos siempre.
+    public int semilla = 1;
+
     [Header("INICIALIZACION")]
     public bool generateOnStart = true;
 
@@ -186,6 +190,10 @@ public class PlantingGrid : MonoBehaviour
 
     private void GenerateObstacles()
     {
+        // Sembrar el generador: sin esto, cada corrida da un mapa distinto y
+        // la demo del editor no se puede reproducir.
+        Random.InitState(semilla);
+
         int created = 0;
         int attempts = 0;
         int maxObstacles = Mathf.Min(

@@ -75,6 +75,8 @@ public class GameSetupMenu : MonoBehaviour
     [Header("CONFIGURACION INICIAL")]
     public int agentCount = 3;
     public int obstacleCount = 35;
+    [Tooltip("Semilla del escenario: misma semilla = mismo mapa")]
+    public int semilla = 1;
 
     [Header("CONEXION PYTHON (agentesPrueba.py)")]
     public string serverUrl = "http://127.0.0.1:5000/simulate";
@@ -281,6 +283,7 @@ public class GameSetupMenu : MonoBehaviour
         plantingGrid.generateOnStart = false;
         plantingGrid.terrain = terrain;
         plantingGrid.obstacleCount = obstacleCount;
+        plantingGrid.semilla = semilla;
         plantingGrid.gameObject.SetActive(true);
         plantingGrid.GenerateGrid();
 

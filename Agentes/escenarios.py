@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 
+import unidades
+
 # Los tres tipos de terreno que ofrece el menú de Unity
 TERRENOS = {
     "plano": 1,      # dificultad 1
@@ -170,13 +172,30 @@ def generar_obstaculos(n: int, cantidad: int, semilla: int,
 # ---------------------------------------------------------------------------
 def construir_payload(terreno: str = "plano", n: int = GRID_POR_DEFECTO,
                       n_agentes: int = 3, obstaculos: int = OBSTACULOS_POR_DEFECTO,
-                      semilla: int = 0, max_fuel: float = 180.0,
-                      max_seeds: int = 35, wage_per_tick: float = 2.5,
-                      cost_per_seed: float = 0.5, steps: int = 2000,
+                      semilla: int = 0, costales: float = 1.0,
+                      estrategia: str = "greedy",
+                      tanque_litros: float = unidades.TANQUE_DIESEL_L,
+                      salario_hora: float = unidades.SALARIO_HORA_MXN,
+                      steps: int = 2000,
                       depot: tuple[int, int] = (0, 0)) -> dict:
-    """Construye el diccionario que espera el servidor / ``run_simulation``."""
+    """Payload del servidor con parámetros en magnitudes de campo.
+
+    ``costales`` es la capacidad del tanque expresada en costales de 20 kg:
+    1 costal ≈ 1 ha ≈ 123 celdas. Todo lo demás se deriva de ahí
+    (``unidades.parametros_calibrados``).
+    """
+    if costales <= 0:
+        raise ValueError("costales debe ser mayor que cero")
+    if estrategia not in ("greedy", "zigzag"):
+        raise ValueError(f"Estrategia desconocida: {estrategia!r}")
+
     elevacion = generar_elevacion(terreno, n, semilla)
     mapa_obs = generar_obstaculos(n, obstaculos, semilla + 1, depot)
+    calibrado = unidades.parametros_calibrados(
+        costales_por_tanque=costales,
+        tanque_litros=tanque_litros,
+        salario_hora=salario_hora,
+    )
 
     return {
         "grid_size": [n, n],
@@ -185,11 +204,9 @@ def construir_payload(terreno: str = "plano", n: int = GRID_POR_DEFECTO,
         "depot_pos": [int(depot[0]), int(depot[1])],
         "elevation_map": elevacion.tolist(),
         "obstacle_map": mapa_obs.tolist(),
-        "max_fuel": float(max_fuel),
-        "max_seeds": int(max_seeds),
-        "wage_per_tick": float(wage_per_tick),
-        "cost_per_seed": float(cost_per_seed),
+        "estrategia": estrategia,
         "steps": int(steps),
+        **calibrado,
     }
 
 

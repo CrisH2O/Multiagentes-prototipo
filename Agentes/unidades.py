@@ -138,3 +138,49 @@ if __name__ == "__main__":
     print("Campo 20x20 (3.24 ha):")
     for clave, valor in preset_realista(20).items():
         print(f"  {clave:22s} {valor}")
+
+
+# ---------------------------------------------------------------------------
+# Calibración del modelo a magnitudes reales
+# ---------------------------------------------------------------------------
+# Un tanque = un costal = una hectárea. Así se piensa en el campo.
+COSTALES_POR_TANQUE = 1.0
+
+# Un tractor mediano lleva ~300 L de diésel: no recarga en un lote de 3 ha,
+# así que el reabastecimiento lo dispara la semilla, como en la realidad.
+TANQUE_DIESEL_L = 300.0
+
+# Jornal del operador: ~$50 MXN por hora (8 h ≈ $400/día).
+SALARIO_HORA_MXN = 50.0
+
+# Derivados
+LITROS_POR_CELDA = LITROS_POR_HA / CELDAS_POR_HECTAREA        # ≈ 0.0697 L
+COSTO_SEMILLA_POR_CELDA = COSTO_COSTAL_MXN / CELDAS_POR_HECTAREA  # ≈ $12.15
+
+
+def salario_por_tick(salario_hora: float = SALARIO_HORA_MXN,
+                     velocidad_kmh: float = VELOCIDAD_KMH) -> float:
+    """Costo de mano de obra que corresponde a un tick (≈ 5.4 s)."""
+    horas_por_tick = segundos_por_tick(velocidad_kmh) / 3600.0
+    return salario_hora * horas_por_tick
+
+
+def parametros_calibrados(costales_por_tanque: float = COSTALES_POR_TANQUE,
+                          tanque_litros: float = TANQUE_DIESEL_L,
+                          salario_hora: float = SALARIO_HORA_MXN,
+                          precio_litro: float = PRECIO_DIESEL_MXN_L) -> dict:
+    """Parámetros del modelo expresados en magnitudes de campo.
+
+    1 unidad de semilla del modelo = 1 celda sembrada. Por eso un tanque de
+    un costal son ~123 unidades, no 60,000 semillas.
+    """
+    return {
+        "max_seeds": int(round(costales_por_tanque * CELDAS_POR_HECTAREA)),
+        "max_fuel": float(tanque_litros),
+        "fuel_por_paso": LITROS_POR_CELDA,
+        "cost_per_seed": round(costales_por_tanque * COSTO_COSTAL_MXN
+                               / (costales_por_tanque * CELDAS_POR_HECTAREA), 4),
+        "wage_per_tick": round(salario_por_tick(salario_hora), 5),
+        "precio_litro": float(precio_litro),
+        "costales_por_tanque": costales_por_tanque,
+    }
