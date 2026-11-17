@@ -1,2 +1,10 @@
+# Modelo de simulación (mínimo para correr los experimentos)
 numpy>=1.26
+
+# Dashboard y gráficas
+pandas>=2.0
+matplotlib>=3.7
+streamlit>=1.30
+
+# Tests
 pytest>=7
