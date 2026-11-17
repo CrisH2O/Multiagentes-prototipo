@@ -1,70 +1,6 @@
-using System;
-using System.Collections;
+
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
-using Debug = UnityEngine.Debug;
-
-[Serializable]
-public class GridCoordData
-{
-    public int x;
-    public int y;
-}
-
-[Serializable]
-public class AgentFrameData
-{
-    public int id;
-    public int[] pos;
-    public float fuel;
-    public int seeds;
-    public string state;
-    public int planted_total;
-}
-
-[Serializable]
-public class SimulationFrameData
-{
-    public int tick;
-    public int remaining_cells;
-    public GridCoordData[] planted_cells;
-    public AgentFrameData[] agents;
-}
-
-[Serializable]
-public class SimulationMetricsData
-{
-    public int total_ticks;
-    public int total_steps;
-    public float total_fuel_consumed;
-    public float driver_wage_cost;
-    public float seed_cost;
-    public int remaining_cells;
-}
-
-[Serializable]
-public class SimulationResponseData
-{
-    public string status;
-    public string message;
-    public int[] depot_pos;
-    public SimulationMetricsData metrics;
-    public SimulationFrameData[] frames;
-}
-
-[Serializable]
-public class PendingConfigData
-{
-    public bool has_config;
-    public int difficulty;
-    public int n_agents;
-    public int obstacles;
-}
 
 public class GameSetupMenu : MonoBehaviour
 {
@@ -75,17 +11,11 @@ public class GameSetupMenu : MonoBehaviour
     [Header("CONFIGURACION INICIAL")]
     public int agentCount = 3;
     public int obstacleCount = 35;
-    [Tooltip("Semilla del escenario: misma semilla = mismo mapa")]
+    // Misma semilla => mismo mapa. Permite reproducir una corrida.
     public int semilla = 1;
-
-    [Header("CONEXION PYTHON (agentesPrueba.py)")]
-    public string serverUrl = "http://127.0.0.1:5000/simulate";
-    public float tickDuration = 0.14f;
 
     private int selectedTerrain = 0;
     private bool simulationStarted = false;
-    private bool isPaused = false;
-    private string statusMessage = "";
 
     private string[] terrainNames =
     {
@@ -123,15 +53,8 @@ public class GameSetupMenu : MonoBehaviour
 
     void OnGUI()
     {
-        if (!simulationStarted)
-        {
-            DrawSetupMenu();
-        }
-        else
-        {
-            DrawSimulationHUD();
-        }
-    }
+        if (simulationStarted)
+            return;
 
         // Dimensiones adaptables
         float panelWidth = Mathf.Min(420f, Screen.width - 30f);
@@ -275,16 +198,23 @@ public class GameSetupMenu : MonoBehaviour
 
         // Configurar terreno
         terrain.generateOnStart = false;
-        terrain.terrainType = (TerrainGenerator.TerrainType)selectedTerrain;
+
+        terrain.terrainType =
+            (TerrainGenerator.TerrainType)selectedTerrain;
+
         terrain.gameObject.SetActive(true);
+
         terrain.GenerateTerrain();
 
         // Configurar cuadrícula y obstaculos
         plantingGrid.generateOnStart = false;
+
         plantingGrid.terrain = terrain;
         plantingGrid.obstacleCount = obstacleCount;
         plantingGrid.semilla = semilla;
+
         plantingGrid.gameObject.SetActive(true);
+
         plantingGrid.GenerateGrid();
 
         // Generar tractores
@@ -358,8 +288,8 @@ public class GameSetupMenu : MonoBehaviour
             );
 
             agent.transform.position = new Vector3(
-                depotWorldPos.x + offset.x,
-                depotWorldPos.y + offset.y,
+                position.x,
+                position.y,
                 -0.2f
             );
 
@@ -375,335 +305,7 @@ public class GameSetupMenu : MonoBehaviour
             sr.sortingOrder = 6;
         }
 
-        Debug.Log("Tractores generados en la base (0,0): " + spawnedAgents.Count);
-    }
-
-    Vector2 GetDepotOffset(int index, int total)
-    {
-        if (total <= 1)
-            return Vector2.zero;
-
-        float angle = (2f * Mathf.PI * index) / total;
-        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 0.08f;
-    }
-
-    IEnumerator RunPythonSimulationCoroutine()
-    {
-        statusMessage = "Conectando con agentesPrueba.py...";
-        string jsonPayload = BuildSimulationRequestJson();
-
-        string responseJson = null;
-        string errorMsg = null;
-
-        yield return SendSimulationRequest(jsonPayload, (res, err) =>
-        {
-            responseJson = res;
-            errorMsg = err;
-        });
-
-        // Si el servidor Python no estaba encendido aún, iniciarlo automáticamente y reintentar
-        if (string.IsNullOrEmpty(responseJson))
-        {
-            statusMessage = "Iniciando servidor agentesPrueba.py...";
-            bool started = TryStartPythonServer();
-
-            if (started)
-            {
-                for (int retry = 0; retry < 10; retry++)
-                {
-                    yield return new WaitForSeconds(0.5f);
-                    yield return SendSimulationRequest(jsonPayload, (res, err) =>
-                    {
-                        responseJson = res;
-                        errorMsg = err;
-                    });
-
-                    if (!string.IsNullOrEmpty(responseJson))
-                        break;
-                }
-            }
-        }
-
-        if (string.IsNullOrEmpty(responseJson))
-        {
-            statusMessage = "Error de conexion con Python: " + errorMsg;
-            Debug.LogError(
-                "No se pudo conectar con agentesPrueba.py en " + serverUrl +
-                ". Detalle: " + errorMsg
-            );
-            yield break;
-        }
-
-        SimulationResponseData simResponse =
-            JsonUtility.FromJson<SimulationResponseData>(responseJson);
-
-        if (simResponse == null || simResponse.status != "success" || simResponse.frames == null)
-        {
-            statusMessage = "Error en respuesta de simulacion.";
-            Debug.LogError("Respuesta invalida de agentesPrueba.py: " + responseJson);
-            yield break;
-        }
-
-        finalMetrics = simResponse.metrics;
-        totalFrames = simResponse.frames.Length;
-        statusMessage = "Simulando en tiempo real...";
-
-        Vector3[] startPositions = new Vector3[spawnedAgents.Count];
-        Vector3[] targetPositions = new Vector3[spawnedAgents.Count];
-        int[] prevPlantedTotals = new int[spawnedAgents.Count];
-
-        for (int f = 0; f < simResponse.frames.Length; f++)
-        {
-            while (isPaused)
-            {
-                yield return null;
-            }
-
-            SimulationFrameData frame = simResponse.frames[f];
-            currentFrame = frame;
-
-            // Calcular posiciones destino para cada tractor en este tick
-            for (int i = 0; i < spawnedAgents.Count; i++)
-            {
-                if (spawnedAgents[i] == null)
-                    continue;
-
-                startPositions[i] = spawnedAgents[i].transform.position;
-
-                if (frame.agents != null && i < frame.agents.Length)
-                {
-                    AgentFrameData agentData = frame.agents[i];
-                    int gx = (agentData.pos != null && agentData.pos.Length > 0) ? agentData.pos[0] : 0;
-                    int gy = (agentData.pos != null && agentData.pos.Length > 1) ? agentData.pos[1] : 0;
-
-                    Vector2 cellWorld = plantingGrid.GetPlantingPosition(gx, gy);
-                    Vector2 offset = (gx == 0 && gy == 0)
-                        ? GetDepotOffset(i, spawnedAgents.Count)
-                        : Vector2.zero;
-
-                    targetPositions[i] = new Vector3(
-                        cellWorld.x + offset.x,
-                        cellWorld.y + offset.y,
-                        -0.2f
-                    );
-                }
-                else
-                {
-                    targetPositions[i] = startPositions[i];
-                }
-            }
-
-            // Interpolar suavemente el movimiento de todos los tractores durante el tick
-            float duration = Mathf.Max(0.01f, tickDuration);
-            float elapsed = 0f;
-
-            while (elapsed < duration)
-            {
-                while (isPaused)
-                {
-                    yield return null;
-                }
-
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-
-                for (int i = 0; i < spawnedAgents.Count; i++)
-                {
-                    if (spawnedAgents[i] != null)
-                    {
-                        spawnedAgents[i].transform.position = Vector3.Lerp(
-                            startPositions[i],
-                            targetPositions[i],
-                            t
-                        );
-                    }
-                }
-
-                yield return null;
-            }
-
-            for (int i = 0; i < spawnedAgents.Count; i++)
-            {
-                if (spawnedAgents[i] != null)
-                {
-                    spawnedAgents[i].transform.position = targetPositions[i];
-                }
-            }
-
-            // Marcar las celdas sembradas en este tick
-            if (frame.planted_cells != null)
-            {
-                for (int c = 0; c < frame.planted_cells.Length; c++)
-                {
-                    plantingGrid.MarkCellPlanted(
-                        frame.planted_cells[c].x,
-                        frame.planted_cells[c].y
-                    );
-                }
-            }
-
-            if (frame.agents != null)
-            {
-                for (int i = 0; i < frame.agents.Length && i < prevPlantedTotals.Length; i++)
-                {
-                    AgentFrameData a = frame.agents[i];
-                    if (a.planted_total > prevPlantedTotals[i] && a.pos != null && a.pos.Length >= 2)
-                    {
-                        plantingGrid.MarkCellPlanted(a.pos[0], a.pos[1]);
-                    }
-                    prevPlantedTotals[i] = a.planted_total;
-                }
-            }
-        }
-
-        statusMessage = "Simulacion completada";
-        Debug.Log(
-            $"Simulacion finalizada en {totalFrames} ticks. " +
-            $"Combustible: {finalMetrics.total_fuel_consumed:F2} L"
-        );
-    }
-
-    IEnumerator SendSimulationRequest(string jsonPayload, Action<string, string> callback)
-    {
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonPayload);
-
-        using (UnityWebRequest request = new UnityWebRequest(serverUrl, "POST"))
-        {
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.timeout = 30;
-
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                callback(request.downloadHandler.text, null);
-            }
-            else
-            {
-                callback(null, request.error);
-            }
-        }
-    }
-
-    string BuildSimulationRequestJson()
-    {
-        int n = plantingGrid.gridCells;
-        int difficulty = selectedTerrain + 1;
-        float[,] elevations = plantingGrid.GetElevationMatrix();
-        int[,] obstacles = plantingGrid.GetObstacleMatrix();
-
-        StringBuilder sb = new StringBuilder(8192);
-        sb.Append("{");
-        sb.AppendFormat(CultureInfo.InvariantCulture, "\"grid_size\":[{0},{1}],", n, n);
-        sb.AppendFormat(CultureInfo.InvariantCulture, "\"difficulty\":{0},", difficulty);
-        sb.AppendFormat(CultureInfo.InvariantCulture, "\"n_agents\":{0},", agentCount);
-        sb.Append("\"depot_pos\":[0,0],");
-
-        sb.Append("\"elevation_map\":[");
-        for (int x = 0; x < n; x++)
-        {
-            if (x > 0) sb.Append(",");
-            sb.Append("[");
-            for (int y = 0; y < n; y++)
-            {
-                if (y > 0) sb.Append(",");
-                sb.Append(elevations[x, y].ToString("F4", CultureInfo.InvariantCulture));
-            }
-            sb.Append("]");
-        }
-        sb.Append("],");
-
-        sb.Append("\"obstacle_map\":[");
-        for (int x = 0; x < n; x++)
-        {
-            if (x > 0) sb.Append(",");
-            sb.Append("[");
-            for (int y = 0; y < n; y++)
-            {
-                if (y > 0) sb.Append(",");
-                sb.Append(obstacles[x, y]);
-            }
-            sb.Append("]");
-        }
-        sb.Append("]");
-
-        sb.Append("}");
-        return sb.ToString();
-    }
-
-    bool TryStartPythonServer()
-    {
-        try
-        {
-            if (pythonServerProcess != null && !pythonServerProcess.HasExited)
-                return true;
-
-            // Application.dataPath apunta a .../Multiagentes-prototipo/escenario/Assets
-            DirectoryInfo assetsDir = new DirectoryInfo(Application.dataPath);
-            DirectoryInfo projectRoot = assetsDir.Parent != null && assetsDir.Parent.Parent != null
-                ? assetsDir.Parent.Parent
-                : assetsDir.Parent;
-
-            if (projectRoot == null)
-                return false;
-
-            string scriptPath = Path.Combine(projectRoot.FullName, "agentes", "agentesPrueba.py");
-            if (!File.Exists(scriptPath))
-            {
-                scriptPath = Path.Combine(projectRoot.FullName, "Agentes", "agentesPrueba.py");
-            }
-            if (!File.Exists(scriptPath))
-            {
-                Debug.LogWarning("No se encontro agentesPrueba.py en: " + scriptPath);
-                return false;
-            }
-
-            string venvPythonWin = Path.Combine(projectRoot.FullName, ".venv", "Scripts", "python.exe");
-            string venvPythonUnix = Path.Combine(projectRoot.FullName, ".venv", "bin", "python");
-
-            string pythonExe = "python";
-            if (File.Exists(venvPythonWin))
-                pythonExe = venvPythonWin;
-            else if (File.Exists(venvPythonUnix))
-                pythonExe = venvPythonUnix;
-
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = pythonExe,
-                Arguments = $"\"{scriptPath}\" --no-input",
-                WorkingDirectory = projectRoot.FullName,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            pythonServerProcess = Process.Start(startInfo);
-            Debug.Log("Servidor Python iniciado automaticamente con: " + pythonExe);
-            return pythonServerProcess != null;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning("No se pudo iniciar automaticamente agentesPrueba.py: " + ex.Message);
-            return false;
-        }
-    }
-
-    void StopAutoStartedPythonServer()
-    {
-        try
-        {
-            if (pythonServerProcess != null && !pythonServerProcess.HasExited)
-            {
-                pythonServerProcess.Kill();
-                pythonServerProcess.Dispose();
-                pythonServerProcess = null;
-            }
-        }
-        catch
-        {
-            // Ignorar errores al cerrar el proceso secundario
-        }
+        Debug.Log("Tractores generados: " + positions.Count);
     }
 
     // =====================================
@@ -876,15 +478,6 @@ public class GameSetupMenu : MonoBehaviour
             fontSize = 24,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
-        };
-    }
-
-    GUIStyle SubtitleStyle()
-    {
-        return new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 14,
-            fontStyle = FontStyle.Bold
         };
     }
 
