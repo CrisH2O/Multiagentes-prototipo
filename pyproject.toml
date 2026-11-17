@@ -11,7 +11,9 @@ dependencies = [
     "streamlit>=1.30",
 ]
 
-[project.optional-dependencies]
+# Grupo de desarrollo: `uv sync` lo instala por defecto.
+# (Los extras de [project.optional-dependencies] NO se instalan solos.)
+[dependency-groups]
 dev = [
     "pytest>=7",
 ]
