@@ -92,7 +92,7 @@ def siembra(frames: list[dict]) -> dict[str, int]:
     return {"celdas_sembradas": len(sembradas), "siembras_dobles": dobles}
 
 
-def costo_total(metricas: dict, precio_litro: float = 24.0) -> float:
+def costo_total(metricas: dict, precio_litro: float = 27.0) -> float:
     """Costo monetizado completo: combustible + salarios + semillas.
 
     El modelo reporta litros de combustible pero no los monetiza, así que el
@@ -107,7 +107,7 @@ def costo_total(metricas: dict, precio_litro: float = 24.0) -> float:
 
 
 def resumir_corrida(frames: list[dict], metricas_modelo: dict,
-                    precio_litro: float = 24.0) -> dict:
+                    precio_litro: float = 27.0) -> dict:
     """Junta las métricas del modelo con las derivadas en un solo diccionario."""
     if not frames:
         raise ValueError("La corrida no produjo fotogramas")

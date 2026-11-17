@@ -40,6 +40,8 @@ COLORES_AGENTE = [
 
 METRICAS = {
     "costo_total": "Costo total (MXN)",
+    "costo_ha": "Costo por hectárea (MXN/ha)",
+    "combustible_ha": "Combustible por hectárea (L/ha)",
     "ticks": "Ticks (tiempo)",
     "combustible_l": "Combustible (L)",
     "colisiones": "Colisiones entre tractores",

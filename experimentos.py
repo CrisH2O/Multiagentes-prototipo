@@ -33,6 +33,7 @@ sys.path.insert(0, str(CODIGO))
 import agentesPrueba  # noqa: E402
 import escenarios  # noqa: E402
 import metricas  # noqa: E402
+import unidades  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Bloques experimentales
@@ -77,6 +78,7 @@ COLUMNAS = [
     "costo_total", "cobertura", "colisiones", "pasos_repetidos",
     "ratio_repeticion", "max_visitas_celda", "celdas_sembradas",
     "siembras_dobles", "celdas_restantes",
+    "area_ha", "costo_ha", "combustible_ha", "costales_semilla",
 ]
 
 
@@ -103,6 +105,15 @@ def corrida(config: dict, semilla: int, grid: int, precio_litro: float,
     resumen = metricas.resumir_corrida(
         respuesta["frames"], respuesta["metrics"], precio_litro=precio_litro
     )
+    # Equivalencias de campo (ver INVESTIGACION-AGRICOLA.md)
+    area = unidades.hectareas(grid * grid)
+    resumen["area_ha"] = round(area, 4)
+    resumen["costo_ha"] = round(resumen["costo_total"] / area, 2)
+    resumen["combustible_ha"] = round(resumen["combustible_l"] / area, 2)
+    resumen["costales_semilla"] = round(
+        unidades.costales_de_celdas(resumen["celdas_sembradas"]), 2
+    )
+
     # El tiempo de reloj queda fuera de los resultados: si se guardara en el
     # CSV o en el JSON, dos corridas idénticas parecerían distintas.
     return resumen, respuesta, payload, segundos
@@ -118,7 +129,8 @@ def main() -> int:
     parser.add_argument("--repeticiones", type=int, default=5,
                         help="repeticiones por variante (semillas 1..N)")
     parser.add_argument("--grid", type=int, default=20, help="tamaño del terreno")
-    parser.add_argument("--precio-litro", type=float, default=24.0,
+    parser.add_argument("--precio-litro", type=float,
+                        default=unidades.PRECIO_DIESEL_MXN_L,
                         help="precio del combustible en MXN por litro")
     parser.add_argument("--solo", default=None,
                         help=f"ejecutar solo un bloque: {', '.join(BLOQUES)}")

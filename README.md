@@ -113,7 +113,8 @@ Agentes/
   agentesPrueba.py    Modelo multiagente + servidor HTTP (lo que usa Unity)
   escenarios.py       Generación reproducible de terreno y obstáculos
   metricas.py         Colisiones, revisitas, cobertura y costo monetizado
-  tests/              55 tests: dominio, agentes, escenarios y métricas
+  unidades.py         Conversión a hectáreas, costales y litros/ha
+  tests/              73 tests: dominio, agentes, escenarios, métricas y unidades
   requirements.txt    Dependencias del modelo
 experimentos.py       Diseño experimental -> resultados/experimentos.csv
 figuras.py            Exporta las gráficas del análisis a resultados/figuras/
@@ -121,6 +122,7 @@ dashboard.py          Dashboard Streamlit (comparativas + mapa 2D animado)
 resultados/           CSV de corridas, fotogramas JSON y figuras PNG
 escenario/            Proyecto Unity 6 (URP 2D): render del modelo
 ANALISIS.md           Interpretación de resultados, limitaciones y mejoras
+INVESTIGACION-AGRICOLA.md  Cuánta semilla y diésel se ocupa por hectárea (con fuentes)
 resources/            Enunciado y rúbrica del reto
 ```
 
@@ -134,7 +136,7 @@ Requiere Python ≥ 3.11 y `uv` (recomendado) o `pip`.
 # Entorno
 uv sync
 
-# Tests (55)
+# Tests (73)
 cd Agentes && ../.venv/bin/python -m pytest -q
 
 # Simulación rápida en terminal
@@ -190,13 +192,40 @@ El proyecto está en `2D` porque la rúbrica lo permite explícitamente.
 | Pasos repetidos | entradas a celdas ya recorridas / pasos | ineficiencia de ruta |
 | Combustible | litros consumidos | principal componente del costo |
 | Costo total | combustible + salarios + semillas | objetivo de optimización |
+| Costo por hectárea | costo total / área del campo | permite hablar en unidades de campo |
 
-El combustible se monetiza en `metricas.costo_total` con un precio por litro
-explícito (supuesto declarado en el análisis).
+El combustible se monetiza en `metricas.costo_total` con **$27 MXN/L**, precio
+investigado en [`INVESTIGACION-AGRICOLA.md`](INVESTIGACION-AGRICOLA.md)
+(rango de sensibilidad: $25.39 – $28.00 por litro).
 
 ---
 
-## 6. Reproducibilidad
+## 6. Escala física: hectáreas y costales
+
+El modelo trabaja en celdas, pero los resultados se reportan en las unidades
+del campo. La equivalencia está fundamentada en
+[`INVESTIGACION-AGRICOLA.md`](INVESTIGACION-AGRICOLA.md) y se aplica con
+`Agentes/unidades.py`.
+
+| Concepto | Equivalencia | Fuente |
+|---|---|---|
+| 1 celda | 9 m × 9 m = **81 m²** | ancho de una sembradora de 12 surcos a 76 cm |
+| 1 hectárea | **≈ 123 celdas** | 10,000 m² ÷ 81 m² |
+| Campo 20 × 20 | **3.24 ha** | 400 × 81 m² |
+| 1 celda sembrada | **≈ 486 semillas** de maíz | 60,000 semillas/ha |
+| 1 costal (20 kg) | **≈ 60,000 semillas ≈ 1 ha** | INEGI/INIFAP |
+| Siembra de 1 ha | **8.6 – 10.77 L de diésel** | estudio con monitor SeedStar |
+| 1 tick | **≈ 5.4 s** | avance de 9 m a 6 km/h |
+| Rendimiento | **≈ 4.6 ha/h** | 9 m de ancho × 6 km/h × 85% |
+
+Con eso, un tanque de 35 unidades cubre **0.28 ha** y uno de 60 cubre **0.49 ha**;
+un costal rinde una hectárea completa.
+
+⚠️ El modelo **no está calibrado**: consume ~240 L/ha frente a los 8.6–10.77 L/ha
+reales. Sus cifras sirven para **comparar configuraciones**, no como costo real
+por hectárea. Es la limitación L8 del análisis.
+
+## 7. Reproducibilidad
 
 Cada corrida queda identificada por su **semilla**, que determina a la vez el
 terreno y los obstáculos:
@@ -217,13 +246,14 @@ los reproducibles.
 
 ---
 
-## 7. Resultados y limitaciones
+## 8. Resultados y limitaciones
 
 Los resultados completos, con tablas, interpretación, limitaciones y mejoras
 justificadas, están en **[`ANALISIS.md`](ANALISIS.md)**. Resumen:
 
 - **Cobertura 100% y 0 siembras dobles** en las 80 corridas.
-- **La capacidad de semillas domina el costo** (2.74× de 10 a 60 semillas).
+- **La capacidad de semillas domina el costo** (2.74× de 10 a 60 semillas):
+  de **$16,509/ha a $6,013/ha** según el tanque.
 - **3 tractores es el punto de equilibrio**: 8 tractores tardan 2.26× menos
   pero cuestan 14% más y generan hasta 27 colisiones por corrida.
 - **El terreno casi no discrimina** (2.0% de diferencia): el costo por pendiente
@@ -233,7 +263,7 @@ justificadas, están en **[`ANALISIS.md`](ANALISIS.md)**. Resumen:
 
 ---
 
-## 8. Equipo
+## 9. Equipo
 
 Ana Paula García Valverde · Pablo Velázquez Bremont · Cristhian Zahid Huezo
 García · Kevin Xiao Huang · Alejandro Vila Casahonda · Juan David Silva Camacho

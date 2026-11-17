@@ -1,0 +1,140 @@
+"""Conversión entre las unidades del simulador y las unidades del campo.
+
+El modelo trabaja con **celdas** y **ticks**; en el campo se trabaja con
+**hectáreas** y **costales de semilla**. Este módulo fija esa equivalencia con
+los valores investigados en ``INVESTIGACION-AGRICOLA.md`` (con sus fuentes).
+
+Nada aquí altera la simulación: son conversiones para *reportar* resultados.
+"""
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Geometría: la celda es el ancho de trabajo de la sembradora
+# ---------------------------------------------------------------------------
+# 12 surcos x 0.76 m = 9.12 m  (John Deere 1775NT / DR12)
+LADO_CELDA_M = 9.0
+AREA_CELDA_M2 = LADO_CELDA_M ** 2          # 81 m²
+M2_POR_HECTAREA = 10_000.0
+CELDAS_POR_HECTAREA = M2_POR_HECTAREA / AREA_CELDA_M2   # ≈ 123.46
+
+# ---------------------------------------------------------------------------
+# Semilla de maíz
+# ---------------------------------------------------------------------------
+DENSIDAD_SEMILLAS_HA = 60_000       # típico (rango 45,000 - 80,000)
+DENSIDAD_MIN_HA = 45_000
+DENSIDAD_MAX_HA = 80_000
+SEMILLAS_POR_KG = 3_000             # híbridos comerciales
+KG_POR_COSTAL = 20.0
+SEMILLAS_POR_COSTAL = 60_000
+COSTO_COSTAL_MXN = 1_500.0          # programa subsidiado 2026
+
+# ---------------------------------------------------------------------------
+# Combustible y tiempo
+# ---------------------------------------------------------------------------
+LITROS_POR_HA = 8.6                 # siembra a 6 km/h (rango 8.6 - 10.77)
+LITROS_POR_HA_MAX = 10.77           # siembra a 9 km/h
+PRECIO_DIESEL_MXN_L = 27.0          # rango 25.39 - 28.00 (2026)
+VELOCIDAD_KMH = 6.0
+EFICIENCIA_CAMPO = 0.85             # fracción del tiempo teórico que es efectivo
+
+# ---------------------------------------------------------------------------
+# Conversiones
+# ---------------------------------------------------------------------------
+def hectareas(celdas: int | float) -> float:
+    """Hectáreas que ocupan N celdas (de 9 m de lado)."""
+    return celdas * AREA_CELDA_M2 / M2_POR_HECTAREA
+
+
+def celdas_por_hectarea() -> float:
+    return CELDAS_POR_HECTAREA
+
+
+def semillas_por_hectarea(densidad: float = DENSIDAD_SEMILLAS_HA) -> float:
+    """Semillas necesarias para sembrar una hectárea a la densidad dada."""
+    return densidad
+
+
+def semillas_por_celda(densidad: float = DENSIDAD_SEMILLAS_HA) -> float:
+    """Semillas reales que van en una celda de 81 m²."""
+    return densidad / CELDAS_POR_HECTAREA
+
+
+def costales_por_hectarea(densidad: float = DENSIDAD_SEMILLAS_HA) -> float:
+    """Costales de 20 kg necesarios por hectárea."""
+    return densidad / SEMILLAS_POR_COSTAL
+
+
+def costales_de_celdas(celdas: int | float,
+                       densidad: float = DENSIDAD_SEMILLAS_HA) -> float:
+    """Costales equivalentes a sembrar N celdas."""
+    return hectareas(celdas) * costales_por_hectarea(densidad)
+
+
+def litros_por_hectarea(velocidad_kmh: float = VELOCIDAD_KMH) -> float:
+    """Consumo de diésel interpolado entre las dos velocidades medidas."""
+    if velocidad_kmh <= VELOCIDAD_KMH:
+        return LITROS_POR_HA
+    if velocidad_kmh >= 9.0:
+        return LITROS_POR_HA_MAX
+    # Interpolación lineal entre 6 y 9 km/h
+    avance = (velocidad_kmh - VELOCIDAD_KMH) / (9.0 - VELOCIDAD_KMH)
+    return LITROS_POR_HA + avance * (LITROS_POR_HA_MAX - LITROS_POR_HA)
+
+
+def costo_combustible_por_hectarea(velocidad_kmh: float = VELOCIDAD_KMH,
+                                   precio_litro: float = PRECIO_DIESEL_MXN_L) -> float:
+    """Pesos de diésel por hectárea sembrada."""
+    return litros_por_hectarea(velocidad_kmh) * precio_litro
+
+
+def segundos_por_tick(velocidad_kmh: float = VELOCIDAD_KMH) -> float:
+    """Tiempo real que representa avanzar una celda (9 m) en un tick."""
+    metros_por_segundo = velocidad_kmh * 1000.0 / 3600.0
+    return LADO_CELDA_M / metros_por_segundo
+
+
+def horas_de_ticks(ticks: float, velocidad_kmh: float = VELOCIDAD_KMH) -> float:
+    """Horas de trabajo efectivo equivalentes a N ticks."""
+    return ticks * segundos_por_tick(velocidad_kmh) / 3600.0
+
+
+def hectareas_por_hora(velocidad_kmh: float = VELOCIDAD_KMH,
+                       eficiencia: float = EFICIENCIA_CAMPO) -> float:
+    """Rendimiento de campo teórico corregido por eficiencia."""
+    ancho_m = LADO_CELDA_M
+    m2_por_hora = ancho_m * velocidad_kmh * 1000.0 * eficiencia
+    return m2_por_hora / M2_POR_HECTAREA
+
+
+# ---------------------------------------------------------------------------
+# Preset calibrado para experimentos "realistas"
+# ---------------------------------------------------------------------------
+def preset_realista(n_celdas: int = 20) -> dict:
+    """Parámetros del modelo expresados en magnitudes de campo.
+
+    Devuelve el tanque y el consumo equivalentes a un costal real de semilla,
+    para usarlos en ``escenarios.construir_payload``.
+    """
+    area = hectareas(n_celdas * n_celdas)
+    return {
+        "hectareas": round(area, 3),
+        "costales_equivalentes": round(area * costales_por_hectarea(), 2),
+        # 1 "semilla" del modelo = 1 celda sembrada => 123 celdas por costal
+        "max_seeds_por_costal": round(CELDAS_POR_HECTAREA),
+        "litros_totales": round(area * LITROS_POR_HA, 1),
+        "costo_combustible": round(area * costo_combustible_por_hectarea(), 2),
+        "horas_estimadas": round(area / hectareas_por_hora(), 2),
+    }
+
+
+if __name__ == "__main__":
+    print(f"Celda: {LADO_CELDA_M} m -> {AREA_CELDA_M2:.0f} m²")
+    print(f"Celdas por hectárea: {CELDAS_POR_HECTAREA:.1f}")
+    print(f"Semillas por celda: {semillas_por_celda():.0f}")
+    print(f"1 costal = {SEMILLAS_POR_COSTAL / DENSIDAD_SEMILLAS_HA:.2f} ha")
+    print(f"1 tick = {segundos_por_tick():.2f} s")
+    print(f"Rendimiento: {hectareas_por_hora():.2f} ha/h")
+    print()
+    print("Campo 20x20 (3.24 ha):")
+    for clave, valor in preset_realista(20).items():
+        print(f"  {clave:22s} {valor}")
