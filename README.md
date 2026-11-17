@@ -131,6 +131,7 @@ dashboard.py          Dashboard Streamlit (comparativas + mapa 2D animado)
 resultados/           CSV de corridas, fotogramas JSON y figuras PNG
 escenario/            Proyecto Unity 6 (URP 2D): render del modelo
 ANALISIS.md           Interpretación de resultados, limitaciones y mejoras
+reporte/              Reporte técnico en Word y PDF (se regenera con un script)
 INVESTIGACION-AGRICOLA.md  Cuánta semilla y diésel se ocupa por hectárea (con fuentes)
 resources/            Enunciado y rúbrica del reto
 ```
@@ -170,6 +171,19 @@ Salidas: `resultados/experimentos.csv` (una fila por corrida) y
 
 Genera en `resultados/figuras/` una gráfica costo-vs-colisiones por bloque y
 una comparativa de eficiencia (costo por celda sembrada).
+
+### Reporte técnico
+
+```bash
+.venv/bin/python figuras.py                    # primero las figuras
+python reporte/generar_reporte.py              # luego el documento
+```
+
+Genera `reporte/Reporte_Plantacion_Optima.docx` (y su PDF) con portada,
+arquitectura, metodología, las siete gráficas explicadas una por una, la
+comparativa contra la ruta base, los datos agronómicos y las referencias en APA.
+El documento se construye a partir de `resultados/experimentos.csv`, así que se
+puede regenerar cuando cambien los datos.
 
 ### Dashboard
 
