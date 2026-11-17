@@ -21,6 +21,8 @@ public class PlantingGrid : MonoBehaviour
 
     private bool[,] plantable;
     private bool[,] blocked;
+    private bool[,] planted;
+    private SpriteRenderer[,] cellRenderers;
 
     private Sprite circleSprite;
     private Sprite squareSprite;
@@ -60,6 +62,8 @@ public class PlantingGrid : MonoBehaviour
 
         plantable = new bool[gridCells, gridCells];
         blocked = new bool[gridCells, gridCells];
+        planted = new bool[gridCells, gridCells];
+        cellRenderers = new SpriteRenderer[gridCells, gridCells];
 
         circleSprite = CreateSprite(true);
         squareSprite = CreateSprite(false);
@@ -120,7 +124,19 @@ public class PlantingGrid : MonoBehaviour
                 SpriteRenderer sr =
                     point.AddComponent<SpriteRenderer>();
 
-                if (blocked[x, y])
+                cellRenderers[x, y] = sr;
+
+                if (x == 0 && y == 0)
+                {
+                    // Estacion base / Depot (0, 0)
+                    sr.sprite = squareSprite;
+                    sr.color = new Color(0.15f, 0.55f, 0.95f);
+                    point.transform.localScale =
+                        Vector3.one * cellSize * 0.78f;
+                    point.name = "Depot_0_0";
+                    sr.sortingOrder = 4;
+                }
+                else if (blocked[x, y])
                 {
                     // Obstaculo oscuro
                     sr.sprite = squareSprite;
@@ -170,9 +186,13 @@ public class PlantingGrid : MonoBehaviour
     {
         int created = 0;
         int attempts = 0;
+        int maxObstacles = Mathf.Min(
+            obstacleCount,
+            Mathf.Max(0, gridCells * gridCells - 4)
+        );
 
         while (
-            created < obstacleCount &&
+            created < maxObstacles &&
             attempts < gridCells * gridCells * 5
         )
         {
@@ -180,6 +200,14 @@ public class PlantingGrid : MonoBehaviour
 
             int x = Random.Range(0, gridCells);
             int y = Random.Range(0, gridCells);
+
+            // Asegurar que la base (0,0) y sus salidas inmediatas esten libres
+            if ((x == 0 && y == 0) ||
+                (x == 1 && y == 0) ||
+                (x == 0 && y == 1))
+            {
+                continue;
+            }
 
             if (!blocked[x, y])
             {
@@ -194,6 +222,73 @@ public class PlantingGrid : MonoBehaviour
                 "No fue posible generar todos los obstaculos."
             );
         }
+    }
+
+    // =====================================
+    // MARCAR CELDA COMO SEMBRADA
+    // =====================================
+
+    public void MarkCellPlanted(int x, int y)
+    {
+        if (!InsideGrid(x, y))
+            return;
+
+        if (blocked[x, y] || (x == 0 && y == 0))
+            return;
+
+        planted[x, y] = true;
+
+        if (cellRenderers != null && cellRenderers[x, y] != null)
+        {
+            cellRenderers[x, y].color = new Color(1f, 0.85f, 0.1f);
+            cellRenderers[x, y].transform.localScale =
+                Vector3.one * (markerSize * 1.35f);
+            cellRenderers[x, y].sortingOrder = 3;
+        }
+    }
+
+    // =====================================
+    // EXPORTAR MATRICES PARA PYTHON
+    // =====================================
+
+    public float[,] GetElevationMatrix()
+    {
+        float[,] elevations = new float[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+            {
+                Vector2 pos = GetPlantingPosition(x, y);
+                float elev;
+                float slope;
+                if (terrain != null && terrain.GetTerrainData(pos, out elev, out slope))
+                {
+                    elevations[x, y] = elev;
+                }
+                else
+                {
+                    elevations[x, y] = 0f;
+                }
+            }
+        }
+        return elevations;
+    }
+
+    public int[,] GetObstacleMatrix()
+    {
+        int[,] obstacles = new int[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+            {
+                obstacles[x, y] = (blocked != null && blocked[x, y]) ? 1 : 0;
+            }
+        }
+        if (gridCells > 0)
+        {
+            obstacles[0, 0] = 0;
+        }
+        return obstacles;
     }
 
     // =====================================
