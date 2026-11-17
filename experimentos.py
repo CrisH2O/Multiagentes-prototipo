@@ -76,13 +76,13 @@ COLUMNAS = [
     "ticks", "pasos", "combustible_l", "costo_salarios", "costo_semillas",
     "costo_total", "cobertura", "colisiones", "pasos_repetidos",
     "ratio_repeticion", "max_visitas_celda", "celdas_sembradas",
-    "siembras_dobles", "celdas_restantes", "segundos",
+    "siembras_dobles", "celdas_restantes",
 ]
 
 
 def corrida(config: dict, semilla: int, grid: int, precio_litro: float,
-            verbose: bool = False) -> tuple[dict, dict, dict]:
-    """Ejecuta una simulación y devuelve (métricas, respuesta, payload)."""
+            verbose: bool = False) -> tuple[dict, dict, dict, float]:
+    """Ejecuta una simulación y devuelve (métricas, respuesta, payload, segundos)."""
     payload = escenarios.construir_payload(
         terreno=config["terreno"],
         n=grid,
@@ -103,8 +103,9 @@ def corrida(config: dict, semilla: int, grid: int, precio_litro: float,
     resumen = metricas.resumir_corrida(
         respuesta["frames"], respuesta["metrics"], precio_litro=precio_litro
     )
-    resumen["segundos"] = round(segundos, 3)
-    return resumen, respuesta, payload
+    # El tiempo de reloj queda fuera de los resultados: si se guardara en el
+    # CSV o en el JSON, dos corridas idénticas parecerían distintas.
+    return resumen, respuesta, payload, segundos
 
 
 def nombre_variante(config: dict, variable: str) -> str:
@@ -159,7 +160,7 @@ def main() -> int:
 
             for repeticion in range(1, args.repeticiones + 1):
                 semilla = repeticion  # semillas 1..N => mapas reconstruibles
-                resumen, respuesta, _payload = corrida(
+                resumen, respuesta, _payload, segundos = corrida(
                     config, semilla, args.grid, args.precio_litro, args.verbose
                 )
                 hechas += 1
@@ -197,7 +198,7 @@ def main() -> int:
                       f"ticks={resumen['ticks']:4d}  "
                       f"costo=${resumen['costo_total']:9.2f}  "
                       f"colisiones={resumen['colisiones']}  "
-                      f"({hechas}/{total})")
+                      f"{segundos:5.2f}s  ({hechas}/{total})")
 
     csv_destino = salida / "experimentos.csv"
     with csv_destino.open("w", newline="", encoding="utf-8") as fh:
