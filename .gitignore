@@ -50,3 +50,12 @@ venv/
 .ipynb_checkpoints/
 .pytest_cache/
 *.egg-info/
+simulation/outputs/
+# ===== Metadatos de Unity Version Control (usamos git, no Plastic) =====
+escenario/.plastic/
+
+# ===== Cachés locales y basura del sistema =====
+.DS_Store
+**/.DS_Store
+.uv-cache/
+.mplcache/

@@ -21,7 +21,6 @@ public class PlantingGrid : MonoBehaviour
 
     private bool[,] plantable;
     private bool[,] blocked;
-    private bool[,] planted;
     private SpriteRenderer[,] cellRenderers;
 
     private Sprite circleSprite;
@@ -51,8 +50,9 @@ public class PlantingGrid : MonoBehaviour
             return;
         }
 
-        if (gridCells < 1)
-            gridCells = 1;
+        // Utilizar exactamente las mismas celdas
+        // que el generador del terreno.
+        gridCells = Mathf.Max(1, terrain.gridCells);
 
         // Eliminar elementos anteriores
         for (int i = transform.childCount - 1; i >= 0; i--)
@@ -62,7 +62,6 @@ public class PlantingGrid : MonoBehaviour
 
         plantable = new bool[gridCells, gridCells];
         blocked = new bool[gridCells, gridCells];
-        planted = new bool[gridCells, gridCells];
         cellRenderers = new SpriteRenderer[gridCells, gridCells];
 
         circleSprite = CreateSprite(true);
@@ -80,6 +79,7 @@ public class PlantingGrid : MonoBehaviour
         {
             for (int y = 0; y < gridCells; y++)
             {
+                // CENTRO EXACTO DE CADA CELDA
                 float worldX = origin.x
                     - terrain.worldSize / 2f
                     + (x + 0.5f) * cellSize;
@@ -123,6 +123,7 @@ public class PlantingGrid : MonoBehaviour
 
                 SpriteRenderer sr =
                     point.AddComponent<SpriteRenderer>();
+                cellRenderers[x, y] = sr;
 
                 cellRenderers[x, y] = sr;
 
@@ -138,7 +139,7 @@ public class PlantingGrid : MonoBehaviour
                 }
                 else if (blocked[x, y])
                 {
-                    // Obstaculo oscuro
+                    // OBSTACULO
                     sr.sprite = squareSprite;
 
                     sr.color = new Color(
@@ -157,7 +158,7 @@ public class PlantingGrid : MonoBehaviour
                 }
                 else
                 {
-                    // Punto de plantacion
+                    // PUNTO DE PLANTACION
                     sr.sprite = circleSprite;
 
                     sr.color = plantable[x, y]
@@ -173,8 +174,9 @@ public class PlantingGrid : MonoBehaviour
         }
 
         Debug.Log(
-            "Cuadricula generada. Obstaculos: "
-            + obstacleCount
+            "Cuadricula generada correctamente. " +
+            "Celdas: " + gridCells +
+            " | Obstaculos: " + obstacleCount
         );
     }
 
@@ -303,6 +305,57 @@ public class PlantingGrid : MonoBehaviour
         return plantable[x, y] && !blocked[x, y];
     }
 
+    public void MarkCellPlanted(int x, int y)
+    {
+        if (!InsideGrid(x, y) || blocked[x, y])
+            return;
+
+        SpriteRenderer renderer = cellRenderers[x, y];
+        if (renderer == null)
+            return;
+
+        renderer.color = new Color(1f, 0.85f, 0.1f);
+        renderer.transform.localScale =
+            Vector3.one * (markerSize * 1.35f);
+        renderer.sortingOrder = 3;
+    }
+
+    public float[,] GetElevationMatrix()
+    {
+        float[,] elevations = new float[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+            {
+                float elevation;
+                float slope;
+                Vector2 position = GetPlantingPosition(x, y);
+                elevations[x, y] =
+                    terrain.GetTerrainData(
+                        position,
+                        out elevation,
+                        out slope)
+                    ? elevation
+                    : 0f;
+            }
+        }
+
+        return elevations;
+    }
+
+    public int[,] GetObstacleMatrix()
+    {
+        int[,] obstacles = new int[gridCells, gridCells];
+        for (int x = 0; x < gridCells; x++)
+        {
+            for (int y = 0; y < gridCells; y++)
+                obstacles[x, y] = blocked[x, y] ? 1 : 0;
+        }
+
+        obstacles[0, 0] = 0;
+        return obstacles;
+    }
+
     // =====================================
     // CONSULTAR SI SE PUEDE TRANSITAR
     // =====================================
@@ -312,8 +365,7 @@ public class PlantingGrid : MonoBehaviour
         if (!InsideGrid(x, y))
             return false;
 
-        // El tractor puede atravesar pendientes.
-        // Los obstaculos son los que bloquean el paso.
+        // Los obstaculos bloquean el paso.
         return !blocked[x, y];
     }
 
@@ -348,6 +400,9 @@ public class PlantingGrid : MonoBehaviour
 
     public Vector2 GetPlantingPosition(int x, int y)
     {
+        if (terrain == null)
+            return Vector2.zero;
+
         float cellSize = terrain.worldSize / gridCells;
 
         Vector3 origin = terrain.transform.position;
@@ -367,6 +422,17 @@ public class PlantingGrid : MonoBehaviour
 
     public Vector2 GetRandomWalkablePosition()
     {
+        if (blocked == null)
+        {
+            Debug.LogWarning(
+                "Primero debes generar la cuadrícula."
+            );
+
+            return terrain != null
+                ? terrain.transform.position
+                : Vector2.zero;
+        }
+
         for (int i = 0; i < 1000; i++)
         {
             int x = Random.Range(0, gridCells);
