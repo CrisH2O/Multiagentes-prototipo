@@ -29,6 +29,8 @@ public class PlantingGrid : MonoBehaviour
 
     private Sprite circleSprite;
     private Sprite squareSprite;
+    private Sprite treeSprite;
+    private Sprite stoneSprite;
 
     void Start()
     {
@@ -70,6 +72,8 @@ public class PlantingGrid : MonoBehaviour
 
         circleSprite = CreateSprite(true);
         squareSprite = CreateSprite(false);
+        treeSprite = CreateTreeSprite();
+        stoneSprite = CreateStoneSprite();
 
         // Generar obstaculos aleatorios
         GenerateObstacles();
@@ -131,22 +135,22 @@ public class PlantingGrid : MonoBehaviour
 
                 if (blocked[x, y])
                 {
-                    // OBSTACULO
-                    sr.sprite = squareSprite;
+                    // OBSTACULO: arbol o piedra, elegido de forma estable
+                    // para que el mismo mapa se vea siempre igual.
+                    bool esArbol =
+                        ((x * 92821 + y * 68917 + semilla * 31) & 7) < 5;
 
-                    sr.color = new Color(
-                        0.12f,
-                        0.12f,
-                        0.12f
-                    );
+                    sr.sprite = esArbol ? treeSprite : stoneSprite;
+                    sr.color = Color.white;
 
+                    float escala = cellSize * (esArbol ? 0.98f : 0.78f);
                     point.transform.localScale =
-                        Vector3.one * cellSize * 0.72f;
+                        new Vector3(escala, escala, 1f);
 
                     point.name =
-                        "Obstacle_" + x + "_" + y;
+                        (esArbol ? "Arbol_" : "Piedra_") + x + "_" + y;
 
-                    sr.sortingOrder = 4;
+                    sr.sortingOrder = esArbol ? 5 : 4;
                 }
                 else
                 {
@@ -371,6 +375,120 @@ public class PlantingGrid : MonoBehaviour
     // =====================================
     // CREAR SPRITES
     // =====================================
+
+    // =====================================
+    // SPRITES DE OBSTACULOS (arbol y piedra)
+    // =====================================
+
+    private Sprite CreateTreeSprite()
+    {
+        int size = 32;
+
+        Texture2D texture = new Texture2D(
+            size, size, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+
+        Vector2 copa = new Vector2(16f, 19f);
+        float radio = 11.5f;
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                Color color = Color.clear;
+
+                // Tronco
+                if (x >= 14 && x <= 17 && y >= 2 && y <= 12)
+                {
+                    color = new Color(0.36f, 0.23f, 0.11f);
+                }
+
+                // Copa del arbol, con luz desde arriba a la izquierda
+                float dx = x - copa.x;
+                float dy = y - copa.y;
+                float distancia = Mathf.Sqrt(dx * dx + dy * dy);
+
+                if (distancia < radio)
+                {
+                    float luz = Mathf.Clamp01(
+                        (dx * -0.35f + dy * 0.9f) / radio);
+
+                    color = Color.Lerp(
+                        new Color(0.10f, 0.36f, 0.14f),
+                        new Color(0.45f, 0.80f, 0.38f),
+                        luz * 0.85f);
+                }
+                else if (distancia < radio + 1.2f)
+                {
+                    color = new Color(0.07f, 0.26f, 0.10f);
+                }
+
+                texture.SetPixel(x, y, color);
+            }
+        }
+
+        texture.Apply();
+
+        return Sprite.Create(
+            texture,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            size);
+    }
+
+    private Sprite CreateStoneSprite()
+    {
+        int size = 32;
+
+        Texture2D texture = new Texture2D(
+            size, size, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+
+        Vector2 centro = new Vector2(16f, 15f);
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                float dx = x - centro.x;
+                float dy = y - centro.y;
+                float angulo = Mathf.Atan2(dy, dx);
+
+                // Borde irregular para que parezca piedra y no un circulo
+                float radio = 10.5f
+                    + 1.6f * Mathf.Sin(angulo * 3f)
+                    + 0.9f * Mathf.Cos(angulo * 5f);
+
+                float distancia = Mathf.Sqrt(dx * dx + dy * dy);
+                Color color = Color.clear;
+
+                if (distancia < radio)
+                {
+                    float luz = Mathf.Clamp01(
+                        (dx * -0.5f + dy * 0.8f) / radio);
+
+                    color = Color.Lerp(
+                        new Color(0.38f, 0.38f, 0.41f),
+                        new Color(0.74f, 0.74f, 0.78f),
+                        0.25f + luz * 0.75f);
+                }
+                else if (distancia < radio + 1f)
+                {
+                    color = new Color(0.26f, 0.26f, 0.29f);
+                }
+
+                texture.SetPixel(x, y, color);
+            }
+        }
+
+        texture.Apply();
+
+        return Sprite.Create(
+            texture,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            size);
+    }
 
     private Sprite CreateSprite(bool circle)
     {

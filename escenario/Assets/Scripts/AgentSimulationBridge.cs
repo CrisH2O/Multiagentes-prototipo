@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -32,11 +33,34 @@ public class UnitySimulationFrame
 }
 
 [Serializable]
+public class UnitySimulationMetrics
+{
+    public int total_ticks;
+    public int total_steps;
+    public float total_fuel_consumed;
+    public float driver_wage_cost;
+    public float seed_cost;
+    public int remaining_cells;
+}
+
+[Serializable]
 public class UnitySimulationResponse
 {
     public string status;
     public string message;
+    public UnitySimulationMetrics metrics;
     public UnitySimulationFrame[] frames;
+}
+
+// Resumen de una corrida, para la tabla comparativa de la interfaz
+public class ResultadoCorrida
+{
+    public string estrategia;
+    public int ticks;
+    public float litros;
+    public float litrosPorHectarea;
+    public float costoTotal;
+    public float costoPorHectarea;
 }
 
 public class AgentSimulationBridge : MonoBehaviour
@@ -51,15 +75,56 @@ public class AgentSimulationBridge : MonoBehaviour
     private Coroutine simulation;
     private Process pythonServer;
     private GameObject motherShip;
+    private string estrategia = "greedy";
+
+    [Header("METRICAS")]
+    [Tooltip("Precio del diesel en MXN por litro")]
+    public float precioDiesel = 27f;
+    [Tooltip("1 celda de 9x9 m = 0.0081 ha")]
+    public float hectareasPorCelda = 0.0081f;
+
+    public const int MAX_HISTORIAL = 8;
+    private readonly List<ResultadoCorrida> historial =
+        new List<ResultadoCorrida>();
+
+    public IReadOnlyList<ResultadoCorrida> Historial { get { return historial; } }
+    public UnitySimulationMetrics Metrics { get; private set; }
+    public bool SimulacionTerminada { get; private set; }
+    public int TickActual { get; private set; }
+    public int TicksTotales { get; private set; }
+    public string EstrategiaActual { get { return estrategia; } }
+    public string MensajeError { get; private set; }
+
+    private float hectareas
+    {
+        get
+        {
+            if (plantingGrid == null)
+                return 1f;
+
+            return plantingGrid.gridCells * plantingGrid.gridCells
+                * hectareasPorCelda;
+        }
+    }
 
     public void StartSimulation(
         PlantingGrid grid,
         int numberOfAgents,
-        int terrainDifficulty)
+        int terrainDifficulty,
+        string nuevaEstrategia)
     {
         plantingGrid = grid;
         agentCount = numberOfAgents;
         difficulty = terrainDifficulty;
+        estrategia = string.IsNullOrEmpty(nuevaEstrategia)
+            ? "greedy"
+            : nuevaEstrategia;
+
+        SimulacionTerminada = false;
+        TickActual = 0;
+        TicksTotales = 0;
+        MensajeError = null;
+
         CreateMotherShip();
 
         if (simulation != null)
@@ -113,11 +178,56 @@ public class AgentSimulationBridge : MonoBehaviour
             yield break;
         }
 
+        TicksTotales = simulationResponse.frames.Length;
+
         for (int i = 0; i < simulationResponse.frames.Length; i++)
         {
             ApplyFrame(simulationResponse.frames[i]);
+            TickActual = simulationResponse.frames[i].tick;
             yield return new WaitForSeconds(tickDuration);
         }
+
+        Metrics = simulationResponse.metrics;
+        SimulacionTerminada = true;
+        RegistrarCorrida();
+
+        simulation = null;
+    }
+
+    private void RegistrarCorrida()
+    {
+        if (Metrics == null)
+            return;
+
+        float area = hectareas;
+        float litros = Metrics.total_fuel_consumed;
+        float costo = litros * precioDiesel
+            + Metrics.driver_wage_cost
+            + Metrics.seed_cost;
+
+        historial.Insert(0, new ResultadoCorrida
+        {
+            estrategia = estrategia,
+            ticks = Metrics.total_ticks,
+            litros = litros,
+            litrosPorHectarea = area > 0f ? litros / area : 0f,
+            costoTotal = costo,
+            costoPorHectarea = area > 0f ? costo / area : 0f
+        });
+
+        while (historial.Count > MAX_HISTORIAL)
+            historial.RemoveAt(historial.Count - 1);
+    }
+
+    public void DetenerSimulacion()
+    {
+        if (simulation != null)
+        {
+            StopCoroutine(simulation);
+            simulation = null;
+        }
+
+        SimulacionTerminada = false;
     }
 
     private void ApplyFrame(UnitySimulationFrame frame)
@@ -222,6 +332,10 @@ public class AgentSimulationBridge : MonoBehaviour
             "\"difficulty\":{0},\"n_agents\":{1},",
             difficulty,
             agentCount);
+        json.AppendFormat(
+            CultureInfo.InvariantCulture,
+            "\"estrategia\":\"{0}\",",
+            estrategia);
         json.Append("\"depot_pos\":[0,0],\"elevation_map\":[");
         AppendFloatMatrix(json, elevations, size);
         json.Append("],\"obstacle_map\":[");

@@ -15,6 +15,16 @@ public class GameSetupMenu : MonoBehaviour
     public int semilla = 1;
 
     private int selectedTerrain = 0;
+    private int selectedStrategy = 0;
+    private readonly string[] estrategias =
+    {
+        "Planificador",
+        "Zigzag (base)"
+    };
+    private readonly List<GameObject> tractores =
+        new List<GameObject>();
+    // Sin esto, el scroll se reinicia en cada frame y no se puede bajar.
+    private Vector2 scrollPos = Vector2.zero;
     private bool simulationStarted = false;
 
     private string[] terrainNames =
@@ -54,7 +64,10 @@ public class GameSetupMenu : MonoBehaviour
     void OnGUI()
     {
         if (simulationStarted)
+        {
+            DibujarHud();
             return;
+        }
 
         // Dimensiones adaptables
         float panelWidth = Mathf.Min(420f, Screen.width - 30f);
@@ -78,8 +91,8 @@ public class GameSetupMenu : MonoBehaviour
         );
 
         // Scroll de seguridad para pantallas pequeñas
-        GUILayout.BeginScrollView(
-            Vector2.zero,
+        scrollPos = GUILayout.BeginScrollView(
+            scrollPos,
             false,
             false
         );
@@ -161,6 +174,22 @@ public class GameSetupMenu : MonoBehaviour
 
         GUILayout.EndHorizontal();
 
+        GUILayout.Space(18);
+
+        GUILayout.Label("ESTRATEGIA DE RUTEO");
+
+        for (int i = 0; i < estrategias.Length; i++)
+        {
+            string etiqueta = selectedStrategy == i
+                ? "> " + estrategias[i] + " <"
+                : estrategias[i];
+
+            if (GUILayout.Button(etiqueta, GUILayout.Height(33)))
+            {
+                selectedStrategy = i;
+            }
+        }
+
         GUILayout.Space(22);
 
         // BOTON COMENZAR
@@ -182,6 +211,132 @@ public class GameSetupMenu : MonoBehaviour
         GUILayout.EndScrollView();
 
         GUILayout.EndArea();
+    }
+
+    // =====================================
+    // HUD DE METRICAS
+    // =====================================
+
+    void DibujarHud()
+    {
+        AgentSimulationBridge bridge =
+            GetComponent<AgentSimulationBridge>();
+
+        if (bridge == null)
+            return;
+
+        float ancho = 360f;
+
+        GUILayout.BeginArea(
+            new Rect(12f, 12f, ancho, Screen.height - 24f));
+
+        GUILayout.BeginVertical(GUI.skin.box);
+
+        GUILayout.Label(
+            "SIMULACION AGRICOLA",
+            TitleStyle(),
+            GUILayout.Height(30f));
+
+        string nombreEstrategia = bridge.EstrategiaActual == "greedy"
+            ? "Planificador"
+            : "Zigzag (base)";
+
+        GUILayout.Label("Estrategia: " + nombreEstrategia);
+
+        if (bridge.TicksTotales > 0)
+        {
+            GUILayout.Label(
+                "Tick " + bridge.TickActual +
+                " / " + bridge.TicksTotales +
+                (bridge.SimulacionTerminada ? "  (terminada)" : ""));
+        }
+
+        UnitySimulationMetrics m = bridge.Metrics;
+
+        if (m != null)
+        {
+            float hectareas =
+                plantingGrid.gridCells * plantingGrid.gridCells
+                * bridge.hectareasPorCelda;
+
+            float litros = m.total_fuel_consumed;
+            float costoTotal =
+                litros * bridge.precioDiesel
+                + m.driver_wage_cost
+                + m.seed_cost;
+
+            GUILayout.Space(6f);
+            GUILayout.Label("METRICAS DE LA CORRIDA", SubtitleStyle());
+            GUILayout.Label("Ticks: " + m.total_ticks);
+            GUILayout.Label("Pasos de tractor: " + m.total_steps);
+            GUILayout.Label(
+                "Diesel: " + litros.ToString("F1") + " L  (" +
+                (litros / hectareas).ToString("F1") + " L/ha)");
+            GUILayout.Label(
+                "Costo total: $" + costoTotal.ToString("F0"));
+            GUILayout.Label(
+                "Costo por hectarea: $" +
+                (costoTotal / hectareas).ToString("F0") + "/ha");
+            GUILayout.Label(
+                "  Semilla: $" + m.seed_cost.ToString("F0"));
+            GUILayout.Label(
+                "  Mano de obra: $" +
+                m.driver_wage_cost.ToString("F0"));
+            GUILayout.Label(
+                "  Diesel: $" +
+                (litros * bridge.precioDiesel).ToString("F0"));
+            GUILayout.Label(
+                "Celdas sin sembrar: " + m.remaining_cells);
+        }
+
+        if (bridge.Historial.Count > 0)
+        {
+            GUILayout.Space(6f);
+            GUILayout.Label("COMPARATIVA DE CORRIDAS", SubtitleStyle());
+            GUILayout.Label("estrategia     ticks    $/ha    L/ha");
+
+            for (int i = 0; i < bridge.Historial.Count; i++)
+            {
+                ResultadoCorrida r = bridge.Historial[i];
+                string nombre = r.estrategia == "greedy"
+                    ? "Planificador"
+                    : "Zigzag     ";
+
+                GUILayout.Label(
+                    nombre +
+                    "   " + r.ticks.ToString().PadLeft(5) +
+                    "   $" + r.costoPorHectarea.ToString("F0") +
+                    "   " + r.litrosPorHectarea.ToString("F1"));
+            }
+        }
+
+        GUILayout.Space(10f);
+
+        if (GUILayout.Button("Volver al menu", GUILayout.Height(32f)))
+        {
+            VolverAlMenu();
+        }
+
+        GUILayout.EndVertical();
+        GUILayout.EndArea();
+    }
+
+    void VolverAlMenu()
+    {
+        AgentSimulationBridge bridge =
+            GetComponent<AgentSimulationBridge>();
+
+        if (bridge != null)
+            bridge.DetenerSimulacion();
+
+        for (int i = 0; i < tractores.Count; i++)
+        {
+            if (tractores[i] != null)
+                Destroy(tractores[i]);
+        }
+
+        tractores.Clear();
+        simulationStarted = false;
     }
 
     // =====================================
@@ -230,7 +385,8 @@ public class GameSetupMenu : MonoBehaviour
         bridge.StartSimulation(
             plantingGrid,
             agentCount,
-            selectedTerrain + 1);
+            selectedTerrain + 1,
+            selectedStrategy == 0 ? "greedy" : "zigzag");
     }
 
     // =====================================
@@ -303,6 +459,8 @@ public class GameSetupMenu : MonoBehaviour
 
             sr.sprite = CreateAgentSprite(agentColors[i]);
             sr.sortingOrder = 6;
+
+            tractores.Add(agent);
         }
 
         Debug.Log("Tractores generados: " + positions.Count);
