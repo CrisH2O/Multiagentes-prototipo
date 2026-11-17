@@ -10,6 +10,17 @@
 /unity/[Rr]ecordings/
 /unity/Assets/Plugins/Editor/JetBrains*
 /unity/[Aa]ssets/[Ss]treamingAssets/aa/*
+/escenario/[Ll]ibrary/
+/escenario/[Tt]emp/
+/escenario/[Oo]bj/
+/escenario/[Bb]uild/
+/escenario/[Bb]uilds/
+/escenario/[Ll]ogs/
+/escenario/[Uu]ser[Ss]ettings/
+/escenario/[Mm]emoryCaptures/
+/escenario/[Rr]ecordings/
+/escenario/Assets/Plugins/Editor/JetBrains*
+/escenario/[Aa]ssets/[Ss]treamingAssets/aa/*
 .vs/
 .gradle/
 *.csproj
