@@ -1,2 +1,5 @@
 numpy>=1.26
 pytest>=7
+agentpy==0.1.5
+matplotlib>=3.7
+pandas>=2.0,<4

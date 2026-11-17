@@ -1,9 +1,7 @@
 """
-Celda: una posición (x, y). Cada celda mide lo mismo que el ancho de trabajo
-de la sembradora, así que una pasada de siembra recorre una fila de celdas.
+Celda: una posición (x, y).
 
-Mapa: dice QUÉ TIPO es cada celda. 
-Cada agente tiene su propia copia de lo que cree que hay en el terreno.
+Mapa: Es lo que cada agente cree que hay en una celda
 
 Campo: Es el mapa real que se puede consultar con los sensores
 """
@@ -13,6 +11,8 @@ import random
 from enum import IntEnum
 
 import numpy as np
+
+from mensajes import Correo
 
 # Cada celda es una tupla
 Celda = tuple[int, int]
@@ -128,6 +128,10 @@ class Campo:
         self.sembradas = np.zeros((self.mapa.alto, self.mapa.ancho), dtype=int)
         # Qué agente está en cada celda: {(x, y): "sembradora_1"}
         self.ocupacion: dict[Celda, str] = {}
+        # Vehículos en el campo por nombre
+        self.vehiculos: dict = {}
+        # Canal de comunicación entre los agentes
+        self.correo = Correo()
 
     # Siembra
     def marcar_sembrada(self, celda: Celda) -> None:
@@ -153,7 +157,7 @@ class Campo:
         return self.ocupacion.get(celda)
 
     def colocar(self, agente: str, celda: Celda) -> None:
-        """Pone a un agente en su celda inicial."""
+        # Pone a un agente en su celda inicial.
         if not self.mapa.es_transitable(celda):
             raise ValueError(f"{agente} no puede colocarse en {celda}: no es transitable")
         if self.ocupante(celda) is not None:
@@ -209,12 +213,7 @@ class Campo:
 
 def generar_mapa(ancho: int = 20, alto: int = 12, n_obstaculos: int = 2, tam_max_obstaculo: int = 2,
                  semilla: int | None = None, tamano_celda_m: float = 9.0) -> Mapa:
-    """Genera un campo rectangular: borde de cabecera, interior sembrable y obstáculos.
-
-    Con la misma `semilla` siempre se obtiene el mismo mapa.
-    Los obstáculos dejan al menos una celda libre a su alrededor, así que
-    nunca tocan la cabecera ni entre sí y el campo siempre queda conectado.
-    """
+    """Genera un campo rectangular: borde de cabecera, interior sembrable y obstáculos."""
     if ancho < 5 or alto < 5:
         raise ValueError("El campo debe medir al menos 5x5 celdas")
     rng = random.Random(semilla)
@@ -245,20 +244,3 @@ def generar_mapa(ancho: int = 20, alto: int = 12, n_obstaculos: int = 2, tam_max
     if colocados < n_obstaculos:
         raise ValueError(f"Solo cupieron {colocados} de {n_obstaculos} obstáculos; use un campo más grande")
     return Mapa(tipos, tamano_celda_m)
-
-
-if __name__ == "__main__":
-    # Prueba rápida
-    mapa = generar_mapa(semilla=1)
-    print("Mapa generado:")
-    print(mapa)
-    print(f"\nSembrables: {mapa.contar(TipoCelda.SEMBRABLE)}  "
-          f"Cabecera: {mapa.contar(TipoCelda.CABECERA)}  Obstáculos: {mapa.contar(TipoCelda.OBSTACULO)}")
-
-    campo = Campo(mapa)
-    campo.colocar("sembradora_1", (0, 1))
-    for x in range(1, 6):
-        campo.marcar_sembrada((x, 1))
-    print("\nCampo después de sembrar 5 celdas:")
-    print(campo)
-    print(f"Cobertura: {campo.cobertura():.1%}")
