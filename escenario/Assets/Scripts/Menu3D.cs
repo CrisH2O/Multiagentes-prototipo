@@ -21,6 +21,7 @@ public class Menu3D : MonoBehaviour
     private int terrenoElegido = 1;
     private int agentes = 3;
     private int estrategiaElegida;
+    private int obstaculos;
 
     private bool visible = true;
     private GUIStyle estilo;
@@ -34,6 +35,11 @@ public class Menu3D : MonoBehaviour
         string[] argumentos = System.Environment.GetCommandLineArgs();
 
         // Para pruebas automaticas: arrancar con los valores por defecto
+        if (System.Array.IndexOf(argumentos, "-conobstaculos") >= 0)
+        {
+            obstaculos = 140;
+        }
+
         if (System.Array.IndexOf(argumentos, "-autoiniciar") >= 0)
         {
             Iniciar();
@@ -85,7 +91,8 @@ public class Menu3D : MonoBehaviour
         simulacion.IniciarCon(
             clavesTerreno[terrenoElegido],
             agentes,
-            clavesEstrategia[estrategiaElegida]
+            clavesEstrategia[estrategiaElegida],
+            obstaculos
         );
     }
 
@@ -112,7 +119,7 @@ public class Menu3D : MonoBehaviour
         }
 
         float ancho = 420f;
-        float alto = 400f;
+        float alto = 470f;
         var panel = new Rect(
             (Screen.width - ancho) / 2f, (Screen.height - alto) / 2f, ancho, alto
         );
@@ -173,6 +180,21 @@ public class Menu3D : MonoBehaviour
             {
                 estrategiaElegida = i;
             }
+        }
+
+        y += 56f;
+
+        GUI.Label(new Rect(x, y, ancho - 48f, 22f), "OBSTÁCULOS (árboles y rocas)");
+        y += 24f;
+
+        if (GUI.Button(new Rect(x, y, 176f, 32f), obstaculos == 0 ? "> Sin (100 %) <" : "Sin (100 %)", boton))
+        {
+            obstaculos = 0;
+        }
+
+        if (GUI.Button(new Rect(x + 184f, y, 176f, 32f), obstaculos > 0 ? "> Con (140) <" : "Con (140)", boton))
+        {
+            obstaculos = 140;
         }
 
         y += 56f;

@@ -434,7 +434,8 @@ para que el build no los elimine (ver limitación del bloom en la sección 13).
 | Pasadas por celda | **2.74 → 3** |
 | Pasadas por hectárea | **11** (1,100 m lineales) |
 | Recorrido total del campo | ≈ **110 km** de pasadas |
-| Corrida por defecto | **710 ticks**, 1,459 celdas sembradas (91.2 ha), **1,148 L** de diésel |
+| Corrida por defecto (sin obstáculos) | **741 ticks**, **1,599 celdas** sembradas (99.9 ha), 1,199 L de diésel |
+| Corrida con obstáculos | **710 ticks**, **1,459 celdas** sembradas (91.2 ha), 1,148 L de diésel |
 | Tiempo de campo simulado | **8 h 05 min** |
 | Escalas de reproducción | 1:600 (50 s) … 1:30 (16 min); por defecto **1:150** (~3.2 min) |
 
@@ -483,6 +484,12 @@ En el editor también están en el menú **Herramientas → Campo 3D**:
 5. **Cambio de terreno.** La bodega y los adornos se colocan con la altura del terreno de
    colinas; al cambiar a plano/montañoso la altura del depósito es la misma (meseta), pero
    árboles y rocas pueden quedar ligeramente hundidos o flotando.
+6. **Celdas que no se siembran.** No son un fallo de dibujo: el modelo marca como no
+   sembrables las celdas con obstáculo y la celda del depósito. El simulador pinta
+   exactamente las celdas que marca (comprobado con un contador: `marcadas = pintadas`,
+   0 celdas marcadas sin pintar). El menú permite elegir **"Sin obstáculos (100 %)"**, que
+   deja 1,599 de 1,600 celdas sembradas (la única restante es el depósito, donde arrancan y
+   recargan los tractores).
 
 ---
 

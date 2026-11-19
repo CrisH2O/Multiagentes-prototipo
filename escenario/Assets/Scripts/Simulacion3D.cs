@@ -66,6 +66,7 @@ public class Respuesta3D
     public string message;
     public Metricas3D metrics;
     public Frame3D[] frames;
+    public CeldaFrame3D[] obstacles;
 }
 
 /// <summary>
@@ -94,10 +95,16 @@ public class Simulacion3D : MonoBehaviour
     public Transform contenedorTractores;
     public Transform contenedorCeldas;
 
+    [Header("OBSTACULOS")]
+    public GameObject prefabArbol;
+    public GameObject prefabRoca;
+    public Transform contenedorObstaculos;
+
     [Header("SELECCION DEL MENU")]
     public string terrenoElegido = "colinas";
     public int agentesElegidos = 3;
     public string estrategiaElegida = "greedy";
+    public int obstaculosSolicitados;
 
     [Header("CAMPO")]
     public float hectareasCampo = 100f;
@@ -296,11 +303,14 @@ public class Simulacion3D : MonoBehaviour
     }
 
     /// <summary>Arranca la simulacion con lo elegido en el menu.</summary>
-    public void IniciarCon(string terreno, int agentes, string estrategia)
+    public void IniciarCon(
+        string terreno, int agentes, string estrategia, int obstaculos = 140
+    )
     {
         terrenoElegido = terreno;
         agentesElegidos = Mathf.Clamp(agentes, 1, 4);
         estrategiaElegida = estrategia;
+        obstaculosSolicitados = Mathf.Max(0, obstaculos);
         Iniciar();
     }
 
@@ -312,22 +322,40 @@ public class Simulacion3D : MonoBehaviour
 
     private IEnumerator Ejecutar()
     {
-        mensajeError = null;
-        terminado = false;
-        tickVisible = 0;
-        conectando = true;
-        estado = "Leyendo configuracion...";
+        ReiniciarEstado();
 
-        string payload;
+        // 1) Python arma el payload segun lo elegido en el menu
+        string urlPayload = serverUrl.Replace("/simulate", "/payload") +
+            "?terreno=" + terrenoElegido +
+            "&agentes=" + agentesElegidos +
+            "&estrategia=" + estrategiaElegida +
+            "&obstaculos=" + obstaculosSolicitados;
 
-        try
+        string payload = null;
+        string errorPayload = null;
+
+        yield return EnviarGet(urlPayload, (resultado, fallo) =>
         {
-            payload = File.ReadAllText(RutaPayload());
-        }
-        catch (Exception excepcion)
+            payload = resultado;
+            errorPayload = fallo;
+        });
+
+        if (string.IsNullOrEmpty(payload))
         {
-            Fallar("No se pudo leer el payload: " + excepcion.Message);
-            yield break;
+            Debug.LogWarning(
+                "[Simulacion3D] No se pudo pedir el payload al servidor (" +
+                errorPayload + "). Se usa el archivo local: colinas, 3 tractores."
+            );
+
+            try
+            {
+                payload = File.ReadAllText(RutaPayload());
+            }
+            catch (Exception excepcion)
+            {
+                Fallar("No se pudo leer el payload: " + excepcion.Message);
+                yield break;
+            }
         }
 
         var configuracion = JsonUtility.FromJson<Config3D>(payload);
@@ -394,6 +422,8 @@ public class Simulacion3D : MonoBehaviour
         if (autotest)
         {
             var metricas = respuesta.metrics;
+
+            ContarCeldasPintadas();
 
             Debug.Log(
                 "[AUTOTEST] OK" +
@@ -478,6 +508,8 @@ public class Simulacion3D : MonoBehaviour
 
             tractores.Add(tractor);
         }
+
+        DibujarObstaculos();
 
         for (int i = agentes; i < 6; i++)
         {
@@ -676,6 +708,57 @@ public class Simulacion3D : MonoBehaviour
             }
 
             MarcarCelda(celda.x, celda.y);
+        }
+    }
+
+    /// <summary>
+    /// Coloca un arbol o una roca en cada celda que el modelo marco como
+    /// obstaculo, para que se vea por que no se siembra ahi.
+    /// </summary>
+    private void DibujarObstaculos()
+    {
+        if (contenedorObstaculos != null)
+        {
+            for (int i = contenedorObstaculos.childCount - 1; i >= 0; i--)
+            {
+                Destroy(contenedorObstaculos.GetChild(i).gameObject);
+            }
+        }
+
+        if (respuesta == null || respuesta.obstacles == null ||
+            contenedorObstaculos == null)
+        {
+            return;
+        }
+
+        int n = TamanoGrilla();
+
+        Debug.Log(
+            "[OBSTACULOS] dibujados=" + respuesta.obstacles.Length +
+            " | solicitados=" + obstaculosSolicitados
+        );
+
+        foreach (CeldaFrame3D celda in respuesta.obstacles)
+        {
+            GameObject prefab = (celda.x + celda.y) % 3 == 0
+                ? prefabRoca
+                : prefabArbol;
+
+            if (prefab == null)
+            {
+                continue;
+            }
+
+            Vector3 posicion = CeldaAMundo(terreno, n, celda.x, celda.y);
+
+            var instancia = Instantiate(
+                prefab, posicion,
+                Quaternion.Euler(0f, (celda.x * 53 + celda.y * 31) % 360, 0f),
+                contenedorObstaculos
+            );
+
+            instancia.name = "Obstaculo_" + celda.x + "_" + celda.y;
+            instancia.transform.localScale = Vector3.one * 2f;
         }
     }
 
@@ -963,6 +1046,61 @@ public class Simulacion3D : MonoBehaviour
     // =====================================================================
     // INTERFAZ
     // =====================================================================
+
+    /// <summary>
+    /// Compara las celdas marcadas como sembradas contra las que realmente
+    /// quedaron pintadas en el alphamap (para detectar fallos visuales).
+    /// </summary>
+    private void ContarCeldasPintadas()
+    {
+        if (alfaTerreno == null || terreno == null)
+        {
+            Debug.Log("[SIEMBRA] sin alphamap para contar.");
+            return;
+        }
+
+        int resolucion = terreno.terrainData.alphamapResolution;
+        float porCelda = (float)resolucion / grilla;
+        int pintadas = 0;
+        int faltantes = 0;
+
+        for (int cy = 0; cy < grilla; cy++)
+        {
+            for (int cx = 0; cx < grilla; cx++)
+            {
+                int tx = Mathf.Clamp(
+                    Mathf.FloorToInt((cx + 0.5f) * porCelda), 0, resolucion - 1
+                );
+
+                int ty = Mathf.Clamp(
+                    Mathf.FloorToInt((cy + 0.5f) * porCelda), 0, resolucion - 1
+                );
+
+                bool llena = alfaTerreno[ty, tx, CapaSembrado] > 0.5f;
+
+                if (llena)
+                {
+                    pintadas++;
+                }
+                else if (celdasMarcadas.Contains(cy * grilla + cx))
+                {
+                    faltantes++;
+
+                    if (faltantes <= 10)
+                    {
+                        Debug.Log("[SIEMBRA] celda marcada sin pintar: " + cx + "," + cy);
+                    }
+                }
+            }
+        }
+
+        Debug.Log(
+            "[SIEMBRA] marcadas=" + celdasMarcadas.Count +
+            " | pintadas=" + pintadas +
+            " | marcadas sin pintar=" + faltantes +
+            " | total=" + (grilla * grilla)
+        );
+    }
 
     private static string FormatoHoras(float segundos)
     {

@@ -176,7 +176,8 @@ public static class Campo3DSceneBuilder
         ConfigurarAmbiente();
         CrearPostProceso();
         var simulacion = CrearSimulacion(
-            escenario, objetos, terreno, prefabTractor, prefabCelda
+            escenario, objetos, terreno, prefabTractor, prefabCelda,
+            prefabArbol, prefabRoca
         );
 
         CrearMenu(
@@ -1185,11 +1186,16 @@ public static class Campo3DSceneBuilder
         Transform objetos,
         Terrain terreno,
         GameObject prefabTractor,
-        GameObject prefabCelda
+        GameObject prefabCelda,
+        GameObject prefabArbol,
+        GameObject prefabRoca
     )
     {
         var contenedorCeldas = new GameObject("CeldasSembradas");
         contenedorCeldas.transform.SetParent(escenario, false);
+
+        var contenedorObstaculos = new GameObject("Obstaculos");
+        contenedorObstaculos.transform.SetParent(escenario, false);
 
         var go = new GameObject("SIMULACION");
         go.transform.SetParent(escenario, false);
@@ -1200,6 +1206,9 @@ public static class Campo3DSceneBuilder
         simulacion.prefabCelda = prefabCelda;
         simulacion.contenedorTractores = objetos;
         simulacion.contenedorCeldas = contenedorCeldas.transform;
+        simulacion.contenedorObstaculos = contenedorObstaculos.transform;
+        simulacion.prefabArbol = prefabArbol;
+        simulacion.prefabRoca = prefabRoca;
         simulacion.hectareasCampo = 100f;
         simulacion.anchoSembradora = 9.12f;
         simulacion.segundosRealesPorTick = 41f;

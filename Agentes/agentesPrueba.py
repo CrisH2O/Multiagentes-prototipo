@@ -430,6 +430,12 @@ def run_simulation(payload):
         "depot_pos": list(model.depot),
         "metrics": metrics,
         "frames": model.frames,
+        "obstacles": [
+            {"x": x, "y": y}
+            for x in range(model.width)
+            for y in range(model.height)
+            if model.is_obstacle((x, y))
+        ],
     }
 
 
@@ -457,12 +463,13 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
                 agentes = int(consulta.get("agentes", ["3"])[0])
                 estrategia = consulta.get("estrategia", ["greedy"])[0]
                 costales = float(consulta.get("costales", ["16"])[0])
+                obstaculos = int(consulta.get("obstaculos", ["140"])[0])
 
                 payload = escenarios.construir_payload(
                     terreno=terreno,
                     n=40,
                     n_agentes=agentes,
-                    obstaculos=140,
+                    obstaculos=obstaculos,
                     semilla=3,
                     costales=costales,
                     estrategia=estrategia,
