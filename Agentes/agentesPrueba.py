@@ -464,13 +464,14 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
                 estrategia = consulta.get("estrategia", ["greedy"])[0]
                 costales = float(consulta.get("costales", ["16"])[0])
                 obstaculos = int(consulta.get("obstaculos", ["140"])[0])
+                semilla = int(consulta.get("semilla", ["3"])[0])
 
                 payload = escenarios.construir_payload(
                     terreno=terreno,
                     n=40,
                     n_agentes=agentes,
                     obstaculos=obstaculos,
-                    semilla=3,
+                    semilla=semilla,
                     costales=costales,
                     estrategia=estrategia,
                     steps=6000,

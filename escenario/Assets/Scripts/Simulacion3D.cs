@@ -105,6 +105,7 @@ public class Simulacion3D : MonoBehaviour
     public int agentesElegidos = 3;
     public string estrategiaElegida = "greedy";
     public int obstaculosSolicitados;
+    public int semillaSolicitada = 3;
 
     [Header("CAMPO")]
     public float hectareasCampo = 100f;
@@ -304,13 +305,15 @@ public class Simulacion3D : MonoBehaviour
 
     /// <summary>Arranca la simulacion con lo elegido en el menu.</summary>
     public void IniciarCon(
-        string terreno, int agentes, string estrategia, int obstaculos = 140
+        string terreno, int agentes, string estrategia,
+        int obstaculos = 140, int semilla = 3
     )
     {
         terrenoElegido = terreno;
         agentesElegidos = Mathf.Clamp(agentes, 1, 4);
         estrategiaElegida = estrategia;
         obstaculosSolicitados = Mathf.Max(0, obstaculos);
+        semillaSolicitada = Mathf.Max(0, semilla);
         Iniciar();
     }
 
@@ -329,7 +332,8 @@ public class Simulacion3D : MonoBehaviour
             "?terreno=" + terrenoElegido +
             "&agentes=" + agentesElegidos +
             "&estrategia=" + estrategiaElegida +
-            "&obstaculos=" + obstaculosSolicitados;
+            "&obstaculos=" + obstaculosSolicitados +
+            "&semilla=" + semillaSolicitada;
 
         string payload = null;
         string errorPayload = null;

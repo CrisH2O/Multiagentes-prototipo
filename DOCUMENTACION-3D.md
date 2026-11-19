@@ -435,7 +435,8 @@ para que el build no los elimine (ver limitación del bloom en la sección 13).
 | Pasadas por hectárea | **11** (1,100 m lineales) |
 | Recorrido total del campo | ≈ **110 km** de pasadas |
 | Corrida por defecto (sin obstáculos) | **741 ticks**, **1,599 celdas** sembradas (99.9 ha), 1,199 L de diésel |
-| Corrida con obstáculos | **710 ticks**, **1,459 celdas** sembradas (91.2 ha), 1,148 L de diésel |
+| Corrida con 140 obstáculos | **710 ticks**, **1,459 celdas** sembradas (91.2 ha), 1,148 L de diésel |
+| Corrida con 250 obstáculos | **682 ticks**, **1,349 celdas** sembradas (84.3 ha), 1,102 L de diésel |
 | Tiempo de campo simulado | **8 h 05 min** |
 | Escalas de reproducción | 1:600 (50 s) … 1:30 (16 min); por defecto **1:150** (~3.2 min) |
 

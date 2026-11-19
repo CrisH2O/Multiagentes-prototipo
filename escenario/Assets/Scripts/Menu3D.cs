@@ -2,11 +2,12 @@ using UnityEngine;
 
 /// <summary>
 /// Menu inicial de la escena 3D, equivalente al de la version 2D:
-/// elegir terreno, cantidad de tractores y estrategia antes de simular.
+/// elegir terreno, cantidad de tractores, estrategia, cantidad de obstaculos
+/// y semilla de generacion antes de simular.
 ///
 /// Mientras el menu esta visible, la simulacion no corre. Al presionar
 /// "Iniciar" se activa el terreno elegido y se pide a Python el payload
-/// correspondiente.
+/// correspondiente (incluidos los obstaculos y la semilla).
 /// </summary>
 public class Menu3D : MonoBehaviour
 {
@@ -22,11 +23,13 @@ public class Menu3D : MonoBehaviour
     private int agentes = 3;
     private int estrategiaElegida;
     private int obstaculos;
+    private int semilla = 3;
 
     private bool visible = true;
     private GUIStyle estilo;
     private GUIStyle boton;
     private GUIStyle titulo;
+    private GUIStyle centrado;
 
     void Start()
     {
@@ -34,10 +37,26 @@ public class Menu3D : MonoBehaviour
 
         string[] argumentos = System.Environment.GetCommandLineArgs();
 
-        // Para pruebas automaticas: arrancar con los valores por defecto
+        // Para pruebas automaticas
         if (System.Array.IndexOf(argumentos, "-conobstaculos") >= 0)
         {
             obstaculos = 140;
+        }
+
+        int posObstaculos = System.Array.IndexOf(argumentos, "-obstaculos");
+
+        if (posObstaculos >= 0 && posObstaculos + 1 < argumentos.Length &&
+            int.TryParse(argumentos[posObstaculos + 1], out int numObstaculos))
+        {
+            obstaculos = Mathf.Clamp(numObstaculos, 0, 300);
+        }
+
+        int posSemilla = System.Array.IndexOf(argumentos, "-semilla");
+
+        if (posSemilla >= 0 && posSemilla + 1 < argumentos.Length &&
+            int.TryParse(argumentos[posSemilla + 1], out int numSemilla))
+        {
+            semilla = Mathf.Clamp(numSemilla, 0, 999);
         }
 
         if (System.Array.IndexOf(argumentos, "-autoiniciar") >= 0)
@@ -92,7 +111,8 @@ public class Menu3D : MonoBehaviour
             clavesTerreno[terrenoElegido],
             agentes,
             clavesEstrategia[estrategiaElegida],
-            obstaculos
+            obstaculos,
+            semilla
         );
     }
 
@@ -118,8 +138,8 @@ public class Menu3D : MonoBehaviour
             return;
         }
 
-        float ancho = 420f;
-        float alto = 470f;
+        float ancho = 440f;
+        float alto = 580f;
         var panel = new Rect(
             (Screen.width - ancho) / 2f, (Screen.height - alto) / 2f, ancho, alto
         );
@@ -127,17 +147,18 @@ public class Menu3D : MonoBehaviour
         GUI.Box(panel, GUIContent.none, estilo);
 
         float x = panel.x + 24f;
-        float y = panel.y + 18f;
+        float y = panel.y + 16f;
 
         GUI.Label(new Rect(x, y, ancho - 48f, 34f), "SIMULACIÓN 3D", titulo);
         y += 44f;
 
+        // --- Terreno ---
         GUI.Label(new Rect(x, y, ancho - 48f, 22f), "SELECCIONAR TERRENO");
         y += 24f;
 
         for (int i = 0; i < etiquetasTerreno.Length; i++)
         {
-            var rect = new Rect(x + i * 124f, y, 116f, 32f);
+            var rect = new Rect(x + i * 126f, y, 118f, 32f);
             string etiqueta = terrenoElegido == i
                 ? "> " + etiquetasTerreno[i] + " <"
                 : etiquetasTerreno[i];
@@ -149,9 +170,14 @@ public class Menu3D : MonoBehaviour
             }
         }
 
-        y += 48f;
+        y += 42f;
 
-        GUI.Label(new Rect(x, y, ancho - 48f, 22f), "TRACTORES: " + agentes);
+        // --- Tractores ---
+        GUI.Label(
+            new Rect(x, y, ancho - 48f, 22f),
+            "TRACTORES: " + agentes
+        );
+
         y += 24f;
 
         if (GUI.Button(new Rect(x, y, 56f, 30f), "-", boton))
@@ -164,14 +190,15 @@ public class Menu3D : MonoBehaviour
             agentes = Mathf.Min(4, agentes + 1);
         }
 
-        y += 48f;
+        y += 40f;
 
+        // --- Estrategia ---
         GUI.Label(new Rect(x, y, ancho - 48f, 22f), "ESTRATEGIA");
         y += 24f;
 
         for (int i = 0; i < etiquetasEstrategia.Length; i++)
         {
-            var rect = new Rect(x + i * 184f, y, 176f, 32f);
+            var rect = new Rect(x + i * 194f, y, 186f, 32f);
             string etiqueta = estrategiaElegida == i
                 ? "> " + etiquetasEstrategia[i] + " <"
                 : etiquetasEstrategia[i];
@@ -182,26 +209,57 @@ public class Menu3D : MonoBehaviour
             }
         }
 
-        y += 56f;
+        y += 42f;
 
-        GUI.Label(new Rect(x, y, ancho - 48f, 22f), "OBSTÁCULOS (árboles y rocas)");
+        // --- Obstaculos ---
+        GUI.Label(
+            new Rect(x, y, ancho - 48f, 22f),
+            "OBSTÁCULOS: " + obstaculos +
+            (obstaculos == 0 ? "   (campo completo)" : "   (árboles y rocas)")
+        );
+
         y += 24f;
 
-        if (GUI.Button(new Rect(x, y, 176f, 32f), obstaculos == 0 ? "> Sin (100 %) <" : "Sin (100 %)", boton))
+        Paso(x, y, ref obstaculos, 20, 0, 300);
+        y += 38f;
+
+        // --- Semilla de generacion ---
+        GUI.Label(
+            new Rect(x, y, ancho - 48f, 22f),
+            "SEMILLA DE OBSTÁCULOS: " + semilla
+        );
+
+        y += 24f;
+
+        Paso(x, y, ref semilla, 1, 0, 999);
+
+        if (GUI.Button(new Rect(x + 180f, y, 160f, 30f), "Aleatoria", boton))
         {
-            obstaculos = 0;
+            semilla = Random.Range(0, 1000);
         }
 
-        if (GUI.Button(new Rect(x + 184f, y, 176f, 32f), obstaculos > 0 ? "> Con (140) <" : "Con (140)", boton))
-        {
-            obstaculos = 140;
-        }
+        y += 44f;
 
-        y += 56f;
-
+        // --- Iniciar ---
         if (GUI.Button(new Rect(x, y, ancho - 48f, 44f), "INICIAR", boton))
         {
             Iniciar();
+        }
+    }
+
+    /// <summary>Selector [-] valor [+] que modifica una variable.</summary>
+    private void Paso(float x, float y, ref int valor, int paso, int minimo, int maximo)
+    {
+        if (GUI.Button(new Rect(x, y, 48f, 30f), "-", boton))
+        {
+            valor = Mathf.Max(minimo, valor - paso);
+        }
+
+        GUI.Label(new Rect(x + 54f, y, 50f, 30f), valor.ToString(), centrado);
+
+        if (GUI.Button(new Rect(x + 110f, y, 48f, 30f), "+", boton))
+        {
+            valor = Mathf.Min(maximo, valor + paso);
         }
     }
 
@@ -227,6 +285,12 @@ public class Menu3D : MonoBehaviour
             fontSize = 20,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
+        };
+
+        centrado = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 14
         };
     }
 }
