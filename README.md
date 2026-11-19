@@ -216,7 +216,9 @@ mapa 2D animado tick a tick y descarga del CSV.
 3. Levantar el servidor: `.venv/bin/python Agentes/agentesPrueba.py`
 4. **Play** → elegir terreno, tractores y obstáculos → **Comenzar**.
 
-El proyecto está en `2D` porque la rúbrica lo permite explícitamente.
+La escena 2D sigue disponible como referencia. El escenario principal es ahora **3D**
+(`Assets/Scenes/Campo3D.unity`, 100 ha) y su explicación detallada, criterio por criterio
+de la rúbrica, está en **[`DOCUMENTACION-3D.md`](DOCUMENTACION-3D.md)**.
 
 ---
 

@@ -1032,6 +1032,23 @@ public static class Campo3DSceneBuilder
         colisionador.center = new Vector3(0f, 2.1f, 0f);
         colisionador.size = new Vector3(3.6f, 4.2f, 7.4f);
 
+        // Halo con el ancho real de labor de la sembradora (9.12 m).
+        // Usa el shader propio Campo3D/CeldaSembrada (brillo aditivo pulsante).
+        var halo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        halo.name = "HaloSembradora";
+        UnityEngine.Object.DestroyImmediate(halo.GetComponent<Collider>());
+        halo.transform.SetParent(raiz.transform, false);
+        halo.transform.localPosition = new Vector3(0f, 0.08f, -3.2f);
+        halo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        halo.transform.localScale = new Vector3(9.12f, 6f, 1f);
+
+        var haloRenderer = halo.GetComponent<MeshRenderer>();
+
+        if (haloRenderer != null)
+        {
+            haloRenderer.sharedMaterial = celdaSembrada;
+        }
+
         return GuardarPrefab(raiz, "Assets/Prefabs/Tractor.prefab");
     }
 
