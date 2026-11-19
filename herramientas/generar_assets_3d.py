@@ -183,33 +183,55 @@ def textura_tierra(n: int = 256) -> np.ndarray:
     return np.clip(imagen, 0.0, 1.0)
 
 
-def textura_sembrado(n: int = 256) -> np.ndarray:
-    """Textura de una celda sembrada de 25 x 25 m.
+def textura_sembrado(n: int = 512) -> np.ndarray:
+    """Textura de una celda sembrada de 25 x 25 m (20.5 px por metro).
 
-    Tres franjas verticales (una por pasada de la sembradora de 9.12 m) con
-    surcos finos y algo de ruido de tierra.
+    Dibuja las 3 pasadas de la sembradora (9.12 m), 12 surcos por pasada
+    (0.76 m), la cresta iluminada y las semillas brotando sobre ella.
     """
     rng = np.random.default_rng(41)
     ruido = _ruido_fractal(n, rng, octavas=(16, 32, 64))
 
     base = np.array([0.28, 0.21, 0.14])
-    imagen = base[None, None, :] + (ruido - 0.5)[:, :, None] * 0.10
+    imagen = base[None, None, :] + (ruido - 0.5)[:, :, None] * 0.07
 
-    xs = np.arange(n)[:, None]
-    ys = np.arange(n)[None, :]
+    metros_por_pixel = 25.0 / n
+    xs = np.arange(n) * metros_por_pixel
+    ys = np.arange(n) * metros_por_pixel
 
-    # Surcos horizontales cada ~5 px
-    surcos = (np.sin(ys * 2.0 * np.pi / 5.0) * 0.5 + 0.5) * 0.06
-    imagen = imagen - surcos[:, :, None]
+    fase = (xs % 0.76) / 0.76          # 0 = fondo del surco, 0.5 = cresta
 
-    # Juntas entre pasadas (3 franjas)
-    franja = (xs * 3 // n)
-    borde_franja = np.isclose(xs % (n / 3), 0.0, atol=1.2)
-    imagen = np.where(borde_franja[:, :, None], imagen * 0.55, imagen)
+    # Surco oscuro
+    surco = np.exp(-((fase - 0.0) ** 2) / (2.0 * 0.11 ** 2))
+    imagen = imagen * (1.0 - 0.42 * surco)[:, None, None]
 
-    # Un poco de verde tenue: semilla brotando
-    brote = (ruido > 0.62).astype(np.float64) * 0.10
-    imagen = imagen + brote[:, :, None] * np.array([0.10, 0.22, 0.08])
+    # Cresta iluminada
+    cresta = np.exp(-((fase - 0.5) ** 2) / (2.0 * 0.16 ** 2))
+    imagen = imagen + (cresta * 0.055)[:, None, None]
+
+    # Juntas entre las 3 pasadas (cada 9.12 m)
+    junta = np.exp(-((xs % 9.12) ** 2) / (2.0 * 0.16 ** 2))
+    imagen = imagen * (1.0 - 0.40 * junta)[:, None, None]
+
+    # Semillas brotando: puntos verdes sobre la cresta cada ~0.18 m
+    paso_v = 0.18
+    fila = np.floor(ys / paso_v)
+    fase_v = (ys / paso_v) % 1.0
+    desplazamiento = ((fila * 0.618) % 1.0) * 0.5
+
+    en_fila = (np.abs(fase_v - (0.25 + desplazamiento)) < 0.13)
+    en_cresta = np.abs(fase - (0.52 + 0.02 * np.sin(fila))) < 0.10
+
+    brote = en_fila[None, :] & en_cresta[:, None]
+    verde = np.array([0.30, 0.55, 0.17])
+
+    imagen = np.where(brote[:, :, None],
+                      imagen * 0.35 + verde[None, None, :] * 0.65,
+                      imagen)
+
+    # Paja suelta
+    paja = np.clip((_ruido_tileable(n, 90, rng) - 0.76) * 4.0, 0.0, 1.0)
+    imagen = imagen + paja[:, :, None] * np.array([0.09, 0.07, 0.02])
 
     return np.clip(imagen, 0.0, 1.0)
 

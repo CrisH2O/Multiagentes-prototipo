@@ -203,7 +203,8 @@ def extraer_textura(gltf, binario, indice_material, carpeta_texturas: Path):
 # ---------------------------------------------------------------------------
 def convertir(ruta_entrada: Path, carpeta_salida: Path,
               region=None, nombre_salida: str | None = None,
-              max_tamano: float | None = None) -> None:
+              max_tamano: float | None = None,
+              nodos_incluidos=None, nodos_excluidos=None) -> None:
     gltf, binario = leer_glb(ruta_entrada)
 
     requeridos = gltf.get("extensionsRequired", [])
@@ -229,7 +230,15 @@ def convertir(ruta_entrada: Path, carpeta_salida: Path,
         nodo = gltf["nodes"][indice]
         matriz = matriz_padre @ matriz_local(nodo)
 
-        if "mesh" in nodo:
+        dibujar = True
+
+        if nodos_incluidos is not None and indice not in nodos_incluidos:
+            dibujar = False
+
+        if nodos_excluidos is not None and indice in nodos_excluidos:
+            dibujar = False
+
+        if "mesh" in nodo and dibujar:
             procesar_malla(nodo["mesh"], matriz)
 
         for hijo in nodo.get("children", []):

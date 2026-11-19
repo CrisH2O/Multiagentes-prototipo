@@ -107,7 +107,10 @@ public class Simulacion3D : MonoBehaviour
     [Tooltip("Escalas 1:N. 1:1 seria tiempo real (~8 h); 1:150 = ~3 min")]
     public int[] escalasTiempo = { 600, 300, 150, 60, 30 };
 
-    private int indiceEscala = 2;
+    [Tooltip("Indice de la escala inicial dentro de escalasTiempo")]
+    public int escalaInicial = 2;
+
+    private int indiceEscala;
     private bool pausado;
 
     // Estado interno
@@ -196,6 +199,25 @@ public class Simulacion3D : MonoBehaviour
 
         autotest = System.Array.IndexOf(argumentos, "-autotest") >= 0;
         capturas = System.Array.IndexOf(argumentos, "-capturas") >= 0;
+
+        indiceEscala = Mathf.Clamp(
+            escalaInicial, 0, Mathf.Max(0, escalasTiempo.Length - 1)
+        );
+
+        // Para pruebas: -escala 600 fuerza esa escala
+        int posicionEscala = System.Array.IndexOf(argumentos, "-escala");
+
+        if (posicionEscala >= 0 && posicionEscala + 1 < argumentos.Length &&
+            int.TryParse(argumentos[posicionEscala + 1], out int valor))
+        {
+            for (int i = 0; i < escalasTiempo.Length; i++)
+            {
+                if (escalasTiempo[i] == valor)
+                {
+                    indiceEscala = i;
+                }
+            }
+        }
 
         if (iniciarAlComenzar)
         {
@@ -875,7 +897,10 @@ public class Simulacion3D : MonoBehaviour
             };
         }
 
-        var rect = new Rect(Screen.width - 300f, 12f, 288f, 150f);
+        // El tamano del panel se calcula con el texto, para que nunca se
+        // corte la informacion (ticks, horas, velocidad, etc.).
+        float anchoPanel = 300f;
+        var rect = new Rect(Screen.width - anchoPanel - 12f, 12f, anchoPanel, 10f);
 
         var texto = new StringBuilder();
         texto.AppendLine("SIMULACION 3D");
@@ -922,7 +947,14 @@ public class Simulacion3D : MonoBehaviour
                 m.seed_cost.ToString("F0", CultureInfo.InvariantCulture));
         }
 
-        GUI.Box(rect, texto.ToString(), estiloPanel);
+        var contenido = new GUIContent(texto.ToString());
+        Vector2 tamano = estiloPanel.CalcSize(contenido);
+
+        rect.width = Mathf.Max(anchoPanel, tamano.x + 22f);
+        rect.x = Screen.width - rect.width - 12f;
+        rect.height = tamano.y + 16f;
+
+        GUI.Box(rect, contenido, estiloPanel);
 
         if (!string.IsNullOrEmpty(mensajeError))
         {
@@ -931,7 +963,8 @@ public class Simulacion3D : MonoBehaviour
         }
 
         if ((terminado || !string.IsNullOrEmpty(mensajeError) || !conectando) &&
-            GUI.Button(new Rect(Screen.width - 300f, 168f, 288f, 26f),
+            GUI.Button(
+                new Rect(rect.x, rect.y + rect.height + 6f, rect.width, 26f),
                 "Volver a simular"))
         {
             Iniciar();

@@ -91,6 +91,7 @@ public static class Campo3DSceneBuilder
     {
         CrearCarpetas();
         ConfigurarImportaciones();
+        IncluirShadersPostProceso();
 
         int indiceRenderer = AsegurarRenderer3D();
         CrearMateriales();
@@ -177,6 +178,72 @@ public static class Campo3DSceneBuilder
             " | altura del terreno " + AlturaTerreno + " m" +
             ". La escena SampleScene (2D) quedo intacta."
         );
+    }
+
+    /// <summary>
+    /// El build quita los shaders de post-proceso porque ningun material los
+    /// referencia (salen como "stripped"). Se agregan a la lista de shaders
+    /// siempre incluidos para que bloom y tonemapping funcionen en el .app.
+    /// </summary>
+    private static void IncluirShadersPostProceso()
+    {
+        var graficos = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(
+            "ProjectSettings/GraphicsSettings.asset"
+        );
+
+        if (graficos == null)
+        {
+            return;
+        }
+
+        string[] nombres =
+        {
+            "Hidden/Universal Render Pipeline/Bloom",
+            "Hidden/Universal Render Pipeline/Tonemapping",
+            "Hidden/Universal Render Pipeline/UberPost",
+            "Hidden/Universal Render Pipeline/FinalPost",
+            "Hidden/Universal Render Pipeline/Vignette"
+        };
+
+        var serializado = new SerializedObject(graficos);
+        SerializedProperty lista = serializado.FindProperty("m_AlwaysIncludedShaders");
+
+        if (lista == null)
+        {
+            return;
+        }
+
+        foreach (string nombre in nombres)
+        {
+            var shader = Shader.Find(nombre);
+
+            if (shader == null)
+            {
+                continue;
+            }
+
+            bool existe = false;
+
+            for (int i = 0; i < lista.arraySize; i++)
+            {
+                if (lista.GetArrayElementAtIndex(i).objectReferenceValue == shader)
+                {
+                    existe = true;
+                    break;
+                }
+            }
+
+            if (!existe)
+            {
+                lista.InsertArrayElementAtIndex(lista.arraySize);
+                lista.GetArrayElementAtIndex(lista.arraySize - 1)
+                    .objectReferenceValue = shader;
+            }
+        }
+
+        serializado.ApplyModifiedPropertiesWithoutUndo();
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Campo3D] Shaders de post-proceso incluidos en el build.");
     }
 
     // =====================================================================
@@ -905,11 +972,29 @@ public static class Campo3DSceneBuilder
             renderer.sharedMaterials = materiales;
         }
 
-        // Centrar en XZ y apoyar las ruedas en y = 0
-        Bounds caja = CalcularBounds(instancia);
-        instancia.transform.localPosition -= new Vector3(
-            caja.center.x, caja.min.y, caja.center.z
-        );
+        // Centrar en XZ y apoyar las ruedas en y = 0 usando los bounds de la
+        // malla (los del renderer a veces no estan actualizados al importar).
+        Quaternion giro = Quaternion.Euler(0f, -90f, 0f);
+        instancia.transform.localRotation = giro;
+
+        var filtro = instancia.GetComponentInChildren<MeshFilter>();
+
+        if (filtro != null && filtro.sharedMesh != null)
+        {
+            Bounds malla = filtro.sharedMesh.bounds;
+            Vector3 centroRotado = giro * new Vector3(
+                malla.center.x, 0f, malla.center.z
+            );
+
+            instancia.transform.localPosition = new Vector3(
+                -centroRotado.x, -malla.min.y, -centroRotado.z
+            );
+
+            Debug.Log(
+                "[TRACTOR] malla min=" + malla.min + " centro=" + malla.center +
+                " -> posicion local=" + instancia.transform.localPosition
+            );
+        }
 
         var raiz = new GameObject("Tractor");
         raiz.transform.SetParent(padre, false);
@@ -1072,7 +1157,8 @@ public static class Campo3DSceneBuilder
         simulacion.contenedorCeldas = contenedorCeldas.transform;
         simulacion.hectareasCampo = 100f;
         simulacion.anchoSembradora = 9.12f;
-        simulacion.duracionTick = 0.08f;
+        simulacion.segundosRealesPorTick = 41f;
+        simulacion.escalaInicial = 2;
         simulacion.iniciarAlComenzar = true;
     }
 

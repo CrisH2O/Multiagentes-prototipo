@@ -16,9 +16,9 @@ using UnityEngine.InputSystem;
 public class CamaraSeguimiento : MonoBehaviour
 {
     [Header("ENCUADRE")]
-    public float distancia = 9f;
-    public float altura = 5f;
-    public float alturaMirada = 1.2f;
+    public float distancia = 15f;
+    public float altura = 7f;
+    public float alturaMirada = 2f;
 
     [Header("SUAVIZADO")]
     public float suavizadoPosicion = 4f;
@@ -76,19 +76,18 @@ public class CamaraSeguimiento : MonoBehaviour
                           atras * distancia +
                           Vector3.up * altura;
 
-        float t = 1f - Mathf.Exp(-suavizadoPosicion * Time.deltaTime);
-
-        transform.position = Vector3.Lerp(transform.position, destino, t);
+        // La posicion se pega al tractor: a velocidades altas el suavizado
+        // hacia que la camara se quedara atras y el tractor se viera diminuto.
+        transform.position = destino;
 
         Vector3 mirar = objetivo.position + Vector3.up * alturaMirada;
         Quaternion rotacion = Quaternion.LookRotation(
             mirar - transform.position, Vector3.up
         );
 
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation, rotacion,
-            1f - Mathf.Exp(-suavizadoRotacion * Time.deltaTime)
-        );
+        // Sin suavizado: a escala 1:600 el tractor gira rapido y la camara
+        // se quedaba mirando hacia atras.
+        transform.rotation = rotacion;
     }
 
     /// <summary>Avanza al siguiente modo (orbita -> tractor 1 -> 2 -> 3).</summary>
@@ -197,6 +196,10 @@ public class CamaraSeguimiento : MonoBehaviour
 
         y += 24f;
 
+        int porcentajeSemilla = Mathf.RoundToInt(
+            100f * agente.seeds / Mathf.Max(1, simulacion.MaxSemillas)
+        );
+
         Barra(
             new Rect(x, y, 216f, 14f),
             agente.seeds / (float)simulacion.MaxSemillas,
@@ -205,7 +208,7 @@ public class CamaraSeguimiento : MonoBehaviour
 
         GUI.Label(
             new Rect(x + 222f, y - 3f, 90f, 20f),
-            agente.seeds + " sem"
+            porcentajeSemilla + "%"
         );
 
         y += 24f;
