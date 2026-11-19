@@ -25,9 +25,11 @@ public class CamaraSeguimiento : MonoBehaviour
     public float suavizadoRotacion = 6f;
 
     private OrbitCamera orbita;
+    private Simulacion3D simulacion;
     private Transform objetivo;
     private int modo;
     private GUIStyle estilo;
+    private static Texture2D blanco;
 
     public int Modo { get { return modo; } }
     public string NombreObjetivo
@@ -38,6 +40,18 @@ public class CamaraSeguimiento : MonoBehaviour
     void Start()
     {
         orbita = GetComponent<OrbitCamera>();
+        simulacion = Object.FindFirstObjectByType<Simulacion3D>();
+
+        // Para las pruebas automaticas: arrancar siguiendo el tractor N
+        string[] argumentos = System.Environment.GetCommandLineArgs();
+        int posicion = System.Array.IndexOf(argumentos, "-seguir");
+
+        if (posicion >= 0 && posicion + 1 < argumentos.Length &&
+            int.TryParse(argumentos[posicion + 1], out int numero))
+        {
+            modo = Mathf.Clamp(numero, 0, 3);
+            AplicarModo();
+        }
     }
 
     void Update()
@@ -147,5 +161,97 @@ public class CamaraSeguimiento : MonoBehaviour
             "Camara: " + NombreObjetivo + "\nC: cambiar camara",
             estilo
         );
+
+        if (modo > 0)
+        {
+            DibujarStats();
+        }
+    }
+
+    /// <summary>Panel con semilla, combustible y celdas del tractor seguido.</summary>
+    private void DibujarStats()
+    {
+        if (simulacion == null)
+        {
+            return;
+        }
+
+        AgenteFrame3D agente = simulacion.AgenteActual(modo - 1);
+
+        if (agente == null)
+        {
+            return;
+        }
+
+        var rect = new Rect(12f, Screen.height - 168f, 316f, 156f);
+        GUI.Box(rect, GUIContent.none, estilo);
+
+        float x = rect.x + 10f;
+        float y = rect.y + 8f;
+
+        GUI.Label(
+            new Rect(x, y, 300f, 20f),
+            "Tractor_" + modo.ToString("D2") + "   [" +
+            (agente.state ?? "?") + "]"
+        );
+
+        y += 24f;
+
+        Barra(
+            new Rect(x, y, 216f, 14f),
+            agente.seeds / (float)simulacion.MaxSemillas,
+            new Color(0.45f, 0.82f, 0.35f)
+        );
+
+        GUI.Label(
+            new Rect(x + 222f, y - 3f, 90f, 20f),
+            agente.seeds + " sem"
+        );
+
+        y += 24f;
+
+        Barra(
+            new Rect(x, y, 216f, 14f),
+            agente.fuel / simulacion.MaxCombustible,
+            new Color(0.95f, 0.70f, 0.20f)
+        );
+
+        GUI.Label(
+            new Rect(x + 222f, y - 3f, 90f, 20f),
+            agente.fuel.ToString("F0") + " L"
+        );
+
+        y += 24f;
+
+        GUI.Label(
+            new Rect(x, y, 300f, 20f),
+            "Sembradas: " + agente.planted_total + " celdas"
+        );
+
+        y += 22f;
+
+        GUI.Label(
+            new Rect(x, y, 300f, 20f),
+            "C: cambiar tractor   M: vista aerea"
+        );
+    }
+
+    private void Barra(Rect rect, float fraccion, Color color)
+    {
+        if (blanco == null)
+        {
+            blanco = Texture2D.whiteTexture;
+        }
+
+        GUI.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
+        GUI.DrawTexture(rect, blanco);
+
+        GUI.color = color;
+        GUI.DrawTexture(
+            new Rect(rect.x, rect.y, rect.width * Mathf.Clamp01(fraccion), rect.height),
+            blanco
+        );
+
+        GUI.color = Color.white;
     }
 }

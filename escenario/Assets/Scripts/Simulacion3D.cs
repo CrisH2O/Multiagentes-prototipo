@@ -55,6 +55,8 @@ public class Metricas3D
 public class Config3D
 {
     public int[] grid_size;
+    public int max_seeds;
+    public float max_fuel;
 }
 
 [Serializable]
@@ -97,15 +99,16 @@ public class Simulacion3D : MonoBehaviour
     public float anchoSembradora = 9.12f;
 
     [Header("REPRODUCCION")]
-    [Tooltip("Segundos reales que dura un tick de la simulacion")]
-    public float duracionTick = 0.08f;
+    [Tooltip("Segundos reales que representa un tick (25 m x 3 pasadas a 6 km/h)")]
+    public float segundosRealesPorTick = 41f;
     public bool iniciarAlComenzar = true;
 
-    [Header("VELOCIDAD (tecla T)")]
-    [Tooltip("Multiplicadores de velocidad que se recorren con la tecla T")]
-    public float[] velocidades = { 0.5f, 1f, 2f, 4f };
+    [Header("VELOCIDAD (teclas T y espacio)")]
+    [Tooltip("Escalas 1:N. 1:1 seria tiempo real (~8 h); 1:150 = ~3 min")]
+    public int[] escalasTiempo = { 600, 300, 150, 60, 30 };
 
-    private int indiceVelocidad = 1;
+    private int indiceEscala = 2;
+    private bool pausado;
 
     // Estado interno
     private Respuesta3D respuesta;
@@ -121,6 +124,9 @@ public class Simulacion3D : MonoBehaviour
     private bool autotest;
     private bool capturas;
     private int grilla = 20;
+    private int maxSemillas = 256;
+    private float maxCombustible = 300f;
+    private bool diagnosticoPiso;
 
     // Capa del terreno donde se pinta lo sembrado (0=pasto, 1=tierra, 2=sembrado)
     private const int CapaSembrado = 2;
@@ -140,17 +146,43 @@ public class Simulacion3D : MonoBehaviour
     public string Estado { get { return estado; } }
     public string MensajeError { get { return mensajeError; } }
 
-    public float VelocidadActual
+    /// <summary>Escala de tiempo actual (1:N).</summary>
+    public int EscalaActual
     {
         get
         {
-            if (velocidades == null || velocidades.Length == 0)
+            if (escalasTiempo == null || escalasTiempo.Length == 0)
             {
-                return 1f;
+                return 150;
             }
 
-            return velocidades[Mathf.Clamp(indiceVelocidad, 0, velocidades.Length - 1)];
+            return escalasTiempo[Mathf.Clamp(indiceEscala, 0, escalasTiempo.Length - 1)];
         }
+    }
+
+    public bool Pausado { get { return pausado; } }
+    public int MaxSemillas { get { return maxSemillas; } }
+    public float MaxCombustible { get { return maxCombustible; } }
+
+    /// <summary>Datos del agente en el tick que se esta viendo.</summary>
+    public AgenteFrame3D AgenteActual(int indice)
+    {
+        if (respuesta == null || respuesta.frames == null ||
+            respuesta.frames.Length == 0)
+        {
+            return null;
+        }
+
+        Frame3D frame = respuesta.frames[
+            Mathf.Clamp(tickVisible, 0, respuesta.frames.Length - 1)
+        ];
+
+        if (frame.agents == null || indice < 0 || indice >= frame.agents.Length)
+        {
+            return null;
+        }
+
+        return frame.agents[indice];
     }
     public Respuesta3D Respuesta { get { return respuesta; } }
 
@@ -193,21 +225,31 @@ public class Simulacion3D : MonoBehaviour
     {
         var teclado = Keyboard.current;
 
-        if (teclado != null && teclado.tKey.wasPressedThisFrame)
-        {
-            CiclarVelocidad();
-        }
-    }
-
-    /// <summary>Avanza al siguiente multiplicador de velocidad.</summary>
-    public void CiclarVelocidad()
-    {
-        if (velocidades == null || velocidades.Length == 0)
+        if (teclado == null)
         {
             return;
         }
 
-        indiceVelocidad = (indiceVelocidad + 1) % velocidades.Length;
+        if (teclado.tKey.wasPressedThisFrame)
+        {
+            CiclarEscala();
+        }
+
+        if (teclado.spaceKey.wasPressedThisFrame)
+        {
+            pausado = !pausado;
+        }
+    }
+
+    /// <summary>Avanza a la siguiente escala de tiempo.</summary>
+    public void CiclarEscala()
+    {
+        if (escalasTiempo == null || escalasTiempo.Length == 0)
+        {
+            return;
+        }
+
+        indiceEscala = (indiceEscala + 1) % escalasTiempo.Length;
     }
 
     public void Iniciar()
@@ -242,6 +284,8 @@ public class Simulacion3D : MonoBehaviour
             configuracion.grid_size.Length > 0)
         {
             grilla = configuracion.grid_size[0];
+            maxSemillas = Mathf.Max(1, configuracion.max_seeds);
+            maxCombustible = Mathf.Max(1f, configuracion.max_fuel);
         }
 
         estado = "Consultando al servidor Python...";
@@ -388,10 +432,13 @@ public class Simulacion3D : MonoBehaviour
         while (tickVisible < total - 1)
         {
             float duracion = Mathf.Max(
-                duracionTick / Mathf.Max(VelocidadActual, 0.01f), 0.001f
+                segundosRealesPorTick / Mathf.Max(EscalaActual, 1), 0.001f
             );
 
-            progreso += Time.deltaTime / duracion;
+            if (!pausado)
+            {
+                progreso += Time.deltaTime / duracion;
+            }
 
             int objetivo = Mathf.Min(Mathf.FloorToInt(progreso), total - 1);
 
@@ -452,14 +499,49 @@ public class Simulacion3D : MonoBehaviour
             Vector3 tangente = rutas[i].Tangente(recortado);
             tangente.y = 0f;
 
+            // Inclinar el tractor segun la pendiente del terreno
+            Vector3 normal = Vector3.up;
+
+            if (terreno != null && terreno.terrainData != null)
+            {
+                float u = (posicion.x - terreno.transform.position.x) /
+                          terreno.terrainData.size.x;
+                float v = (posicion.z - terreno.transform.position.z) /
+                          terreno.terrainData.size.z;
+
+                normal = terreno.terrainData.GetInterpolatedNormal(u, v);
+            }
+
+            Quaternion inclinacion = Quaternion.FromToRotation(Vector3.up, normal);
+
             if (tangente.sqrMagnitude > 0.0001f)
             {
-                tractores[i].rotation = Quaternion.LookRotation(
+                tractores[i].rotation = inclinacion * Quaternion.LookRotation(
                     tangente.normalized, Vector3.up
                 );
             }
+            else
+            {
+                tractores[i].rotation = inclinacion;
+            }
 
             tractores[i].position = posicion;
+
+            if (!diagnosticoPiso && i == 0)
+            {
+                diagnosticoPiso = true;
+                var renderer = tractores[i].GetComponentInChildren<Renderer>();
+
+                if (renderer != null)
+                {
+                    Debug.Log(
+                        "[PISO] " + tractores[i].name +
+                        " pivote=" + posicion.y.ToString("F3") +
+                        " | base modelo=" + renderer.bounds.min.y.ToString("F3") +
+                        " | terreno=" + AlturaEn(posicion.x, posicion.z).ToString("F3")
+                    );
+                }
+            }
         }
     }
 
@@ -774,6 +856,13 @@ public class Simulacion3D : MonoBehaviour
     // INTERFAZ
     // =====================================================================
 
+    private static string FormatoHoras(float segundos)
+    {
+        int horas = Mathf.FloorToInt(segundos / 3600f);
+        int minutos = Mathf.FloorToInt((segundos % 3600f) / 60f);
+        return horas + "h " + minutos.ToString("D2") + "min";
+    }
+
     private void OnGUI()
     {
         if (estiloPanel == null)
@@ -805,7 +894,16 @@ public class Simulacion3D : MonoBehaviour
             texto.AppendLine("Celdas restantes: " + restantes);
             texto.AppendLine("Agentes: " + tractores.Count);
             texto.AppendLine(
-                "Velocidad: " + VelocidadActual.ToString("0.##") + "x  (T)"
+                "Velocidad: 1:" + EscalaActual +
+                (pausado ? "  [PAUSA]" : "  (T)")
+            );
+
+            float transcurrido = tickVisible * segundosRealesPorTick;
+            float totalCampo = (total - 1) * segundosRealesPorTick;
+
+            texto.AppendLine(
+                "Tiempo de campo: " + FormatoHoras(transcurrido) +
+                " de " + FormatoHoras(totalCampo)
             );
             texto.AppendLine("Campo: " + hectareasCampo.ToString("F0") + " ha");
             texto.AppendLine(
