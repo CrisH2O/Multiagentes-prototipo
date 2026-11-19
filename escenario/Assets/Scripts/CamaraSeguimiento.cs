@@ -40,7 +40,7 @@ public class CamaraSeguimiento : MonoBehaviour
     void Start()
     {
         orbita = GetComponent<OrbitCamera>();
-        simulacion = Object.FindFirstObjectByType<Simulacion3D>();
+        simulacion = Object.FindAnyObjectByType<Simulacion3D>();
 
         // Para las pruebas automaticas: arrancar siguiendo el tractor N
         string[] argumentos = System.Environment.GetCommandLineArgs();

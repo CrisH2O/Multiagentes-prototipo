@@ -240,7 +240,7 @@ public class Simulacion3D : MonoBehaviour
 
         if (iniciarAlComenzar)
         {
-            var menu = UnityEngine.Object.FindFirstObjectByType<Menu3D>();
+            var menu = UnityEngine.Object.FindAnyObjectByType<Menu3D>();
 
             if (menu != null)
             {
@@ -1278,7 +1278,7 @@ public class Simulacion3D : MonoBehaviour
                 new Rect(rect.x, rect.y + rect.height + 6f, rect.width, 26f),
                 "Volver al menú"))
         {
-            var menu = UnityEngine.Object.FindFirstObjectByType<Menu3D>();
+            var menu = UnityEngine.Object.FindAnyObjectByType<Menu3D>();
 
             if (menu != null)
             {

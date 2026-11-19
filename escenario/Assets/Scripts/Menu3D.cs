@@ -43,7 +43,7 @@ public class Menu3D : MonoBehaviour
         // Para pruebas automaticas
         if (System.Array.IndexOf(argumentos, "-conobstaculos") >= 0)
         {
-            obstaculos = 140;
+            textoObstaculos = "140";
         }
 
         int posObstaculos = System.Array.IndexOf(argumentos, "-obstaculos");
@@ -51,7 +51,7 @@ public class Menu3D : MonoBehaviour
         if (posObstaculos >= 0 && posObstaculos + 1 < argumentos.Length &&
             int.TryParse(argumentos[posObstaculos + 1], out int numObstaculos))
         {
-            obstaculos = Mathf.Clamp(numObstaculos, 0, 300);
+            textoObstaculos = Mathf.Clamp(numObstaculos, 0, 300).ToString();
         }
 
         int posSemilla = System.Array.IndexOf(argumentos, "-semilla");
@@ -59,7 +59,7 @@ public class Menu3D : MonoBehaviour
         if (posSemilla >= 0 && posSemilla + 1 < argumentos.Length &&
             int.TryParse(argumentos[posSemilla + 1], out int numSemilla))
         {
-            semilla = Mathf.Clamp(numSemilla, 0, 999);
+            textoSemilla = Mathf.Clamp(numSemilla, 0, 999).ToString();
         }
 
         if (System.Array.IndexOf(argumentos, "-autoiniciar") >= 0)
