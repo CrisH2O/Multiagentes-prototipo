@@ -1,0 +1,96 @@
+{
+  "mapa": "colinas 20x20, 35 obstáculos, semilla 1",
+  "celdas_libres": 365,
+  "episodios_por_meta": 6000,
+  "alpha": 0.1,
+  "gamma": 0.99,
+  "epsilon": "1.0 -> 0.05 lineal",
+  "metas": [
+    {
+      "meta": [
+        19,
+        19
+      ],
+      "pasos_bfs": 23.4,
+      "pasos_q": 23.53,
+      "exito_final": 1.0,
+      "episodios_a_95": 2125,
+      "transfer_exito": 0.267,
+      "transfer_pasos": 15.0,
+      "meta_b": [
+        19,
+        19
+      ]
+    },
+    {
+      "meta": [
+        17,
+        19
+      ],
+      "pasos_bfs": 21.87,
+      "pasos_q": 21.87,
+      "exito_final": 1.0,
+      "episodios_a_95": 1600,
+      "transfer_exito": 0.067,
+      "transfer_pasos": 21.0,
+      "meta_b": [
+        17,
+        19
+      ]
+    },
+    {
+      "meta": [
+        17,
+        18
+      ],
+      "pasos_bfs": 21.07,
+      "pasos_q": 21.07,
+      "exito_final": 1.0,
+      "episodios_a_95": 1450,
+      "transfer_exito": 0.133,
+      "transfer_pasos": 14.5,
+      "meta_b": [
+        17,
+        18
+      ]
+    },
+    {
+      "meta": [
+        16,
+        18
+      ],
+      "pasos_bfs": 20.47,
+      "pasos_q": 20.47,
+      "exito_final": 1.0,
+      "episodios_a_95": 1575,
+      "transfer_exito": 0.133,
+      "transfer_pasos": 14.0,
+      "meta_b": [
+        16,
+        18
+      ]
+    },
+    {
+      "meta": [
+        14,
+        19
+      ],
+      "pasos_bfs": 20.0,
+      "pasos_q": 20.0,
+      "exito_final": 1.0,
+      "episodios_a_95": 1800,
+      "transfer_exito": 0.0,
+      "transfer_pasos": null,
+      "meta_b": [
+        13,
+        19
+      ]
+    }
+  ],
+  "segundos_totales": 4.7,
+  "exito_final_medio": 1.0,
+  "ratio_pasos_q_vs_bfs": 1.001,
+  "episodios_a_95_medio": 1710.0,
+  "transfer_exito_medio": 0.12,
+  "segundos_por_meta": 0.93
+}

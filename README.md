@@ -126,11 +126,13 @@ Agentes/
   tests/              91 tests: dominio, agentes, modelo, escenarios, métricas y unidades
   requirements.txt    Dependencias del modelo
 experimentos.py       Diseño experimental -> resultados/experimentos.csv
+experimentos_qlearning.py  Q-Learning tabular vs BFS (respuesta al cuestionario)
 figuras.py            Exporta las gráficas del análisis a resultados/figuras/
 dashboard.py          Dashboard Streamlit (comparativas + mapa 2D animado)
 resultados/           CSV de corridas, fotogramas JSON y figuras PNG
 escenario/            Proyecto Unity 6 (URP 2D): render del modelo
 ANALISIS.md           Interpretación de resultados, limitaciones y mejoras
+RESPUESTA-QLEARNING.md  Respuesta al cuestionario de Q-Learning (10 preguntas)
 reporte/              Reporte técnico en Word y PDF (se regenera con un script)
 INVESTIGACION-AGRICOLA.md  Cuánta semilla y diésel se ocupa por hectárea (con fuentes)
 resources/            Enunciado y rúbrica del reto
@@ -162,6 +164,19 @@ cd Agentes && ../.venv/bin/python -m pytest -q
 
 Salidas: `resultados/experimentos.csv` (una fila por corrida) y
 `resultados/runs/*.json` (fotogramas para animar el mapa).
+
+### Q-Learning: ¿conviene reemplazar al planificador?
+
+```bash
+.venv/bin/python experimentos_qlearning.py   # ≈5 s: 5 metas, 6,000 episodios c/u
+```
+
+Mide Q-Learning tabular contra el BFS sobre los mapas reales del simulador:
+cuántos episodios cuesta aprender una meta, si iguala la ruta óptima y si el
+aprendizaje transfiere a un mapa nuevo. Resultados en
+`resultados/qlearning_resumen.json` y `resultados/figuras/qlearning_curva.png`.
+La interpretación y la decisión técnica están en
+[`RESPUESTA-QLEARNING.md`](RESPUESTA-QLEARNING.md).
 
 ### Figuras para el informe
 
