@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import sys
 import threading
+import time
 from urllib.parse import parse_qs, urlparse
 
 import escenarios
@@ -12,6 +13,11 @@ import unidades
 
 
 PENDING_UNITY_CONFIG = None
+
+# Rate limit del endpoint /payload: minimo 0.5 s entre peticiones
+RATE_LIMIT_PAYLOAD = 0.5
+ULTIMO_PAYLOAD = 0.0
+LOCK_PAYLOAD = threading.Lock()
 CONFIG_LOCK = threading.Lock()
 DIRECTIONS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 
@@ -457,6 +463,20 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
         ruta = urlparse(self.path)
 
         if ruta.path == "/payload":
+            global ULTIMO_PAYLOAD
+
+            with LOCK_PAYLOAD:
+                ahora = time.monotonic()
+
+                if ahora - ULTIMO_PAYLOAD < RATE_LIMIT_PAYLOAD:
+                    self.respond(429, {
+                        "status": "rate_limited",
+                        "message": "Espera medio segundo entre peticiones de payload",
+                    })
+                    return
+
+                ULTIMO_PAYLOAD = ahora
+
             try:
                 consulta = parse_qs(ruta.query)
                 terreno = consulta.get("terreno", ["colinas"])[0]

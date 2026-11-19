@@ -465,6 +465,7 @@ public class Simulacion3D : MonoBehaviour
 
         // Borrar la siembra que quedo pintada del intento anterior
         PrepararAlphamap();
+        LimpiarAlphamap();
         VolcarAlphamap();
     }
 
@@ -633,6 +634,28 @@ public class Simulacion3D : MonoBehaviour
 
             float recortado = Mathf.Min(indice, rutas[i].CantidadPuntos - 1f);
             Vector3 posicion = rutas[i].Evaluar(recortado);
+
+            // La spline puede cortar la esquina de una celda vecina; se limita
+            // el desvio al corredor de la celda para no pasar sobre obstaculos.
+            int segmento = Mathf.FloorToInt(recortado);
+            float t = recortado - segmento;
+            Vector3 inicio = rutas[i].Evaluar(segmento);
+            Vector3 fin = rutas[i].Evaluar(Mathf.Min(
+                segmento + 1, rutas[i].CantidadPuntos - 1
+            ));
+            Vector3 lineal = Vector3.Lerp(inicio, fin, t);
+
+            float ladoCelda = terreno != null && terreno.terrainData != null
+                ? terreno.terrainData.size.x / Mathf.Max(1, grilla)
+                : 25f;
+
+            float maxDesvio = ladoCelda * 0.25f;
+            Vector3 desvio = posicion - lineal;
+
+            if (desvio.magnitude > maxDesvio)
+            {
+                posicion = lineal + desvio.normalized * maxDesvio;
+            }
 
             // Pegado al terreno (las alturas reales mandan sobre la curva)
             posicion.y = AlturaEn(posicion.x, posicion.z);
@@ -846,6 +869,30 @@ public class Simulacion3D : MonoBehaviour
                 alfaTerreno[y, x, 0] = 0f;
                 alfaTerreno[y, x, 1] = 0f;
                 alfaTerreno[y, x, 2] = 1f;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Devuelve la capa de siembra a cero y reparte ese peso al pasto.
+    /// Se hace sobre la copia en memoria, no sobre el mapa base, para que
+    /// funcione aunque el terreno ya estuviera pintado.
+    /// </summary>
+    private void LimpiarAlphamap()
+    {
+        if (alfaTerreno == null)
+        {
+            return;
+        }
+
+        int resolucion = terreno.terrainData.alphamapResolution;
+
+        for (int y = 0; y < resolucion; y++)
+        {
+            for (int x = 0; x < resolucion; x++)
+            {
+                alfaTerreno[y, x, 0] += alfaTerreno[y, x, CapaSembrado];
+                alfaTerreno[y, x, CapaSembrado] = 0f;
             }
         }
     }
@@ -1097,6 +1144,23 @@ public class Simulacion3D : MonoBehaviour
                 }
             }
         }
+
+        int sembradasSobreObstaculo = 0;
+
+        if (respuesta != null && respuesta.obstacles != null)
+        {
+            foreach (CeldaFrame3D obstaculo in respuesta.obstacles)
+            {
+                if (celdasMarcadas.Contains(obstaculo.y * grilla + obstaculo.x))
+                {
+                    sembradasSobreObstaculo++;
+                }
+            }
+        }
+
+        Debug.Log(
+            "[SIEMBRA] celdas sembradas sobre obstaculos=" + sembradasSobreObstaculo
+        );
 
         Debug.Log(
             "[SIEMBRA] marcadas=" + celdasMarcadas.Count +

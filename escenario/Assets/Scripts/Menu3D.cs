@@ -22,8 +22,11 @@ public class Menu3D : MonoBehaviour
     private int terrenoElegido = 1;
     private int agentes = 3;
     private int estrategiaElegida;
-    private int obstaculos;
-    private int semilla = 3;
+    private string textoObstaculos = "0";
+    private string textoSemilla = "3";
+    private float ultimoInicio = -10f;
+    private string aviso;
+    private float avisoHasta;
 
     private bool visible = true;
     private GUIStyle estilo;
@@ -95,6 +98,16 @@ public class Menu3D : MonoBehaviour
 
     private void Iniciar()
     {
+        // Rate limit: no permitir lanzar corridas mas rapido que 1 cada 1.5 s
+        if (Time.unscaledTime - ultimoInicio < 1.5f)
+        {
+            aviso = "Espera un momento antes de iniciar otra corrida.";
+            avisoHasta = Time.unscaledTime + 2f;
+            return;
+        }
+
+        ultimoInicio = Time.unscaledTime;
+
         visible = false;
         ActivarTerreno();
 
@@ -111,8 +124,8 @@ public class Menu3D : MonoBehaviour
             clavesTerreno[terrenoElegido],
             agentes,
             clavesEstrategia[estrategiaElegida],
-            obstaculos,
-            semilla
+            Obstaculos(),
+            Semilla()
         );
     }
 
@@ -214,28 +227,37 @@ public class Menu3D : MonoBehaviour
         // --- Obstaculos ---
         GUI.Label(
             new Rect(x, y, ancho - 48f, 22f),
-            "OBSTÁCULOS: " + obstaculos +
-            (obstaculos == 0 ? "   (campo completo)" : "   (árboles y rocas)")
+            "OBSTÁCULOS (0 a 300)"
         );
 
         y += 24f;
 
-        Paso(x, y, ref obstaculos, 20, 0, 300);
-        y += 38f;
+        textoObstaculos = CampoNumero(
+            new Rect(x, y, 120f, 30f), textoObstaculos, 3
+        );
+
+        GUI.Label(
+            new Rect(x + 130f, y, ancho - 178f, 30f),
+            Obstaculos() == 0 ? "campo completo" : "árboles y rocas"
+        );
+
+        y += 40f;
 
         // --- Semilla de generacion ---
         GUI.Label(
             new Rect(x, y, ancho - 48f, 22f),
-            "SEMILLA DE OBSTÁCULOS: " + semilla
+            "SEMILLA DE OBSTÁCULOS (0 a 999)"
         );
 
         y += 24f;
 
-        Paso(x, y, ref semilla, 1, 0, 999);
+        textoSemilla = CampoNumero(
+            new Rect(x, y, 120f, 30f), textoSemilla, 3
+        );
 
-        if (GUI.Button(new Rect(x + 180f, y, 160f, 30f), "Aleatoria", boton))
+        if (GUI.Button(new Rect(x + 130f, y, 140f, 30f), "Aleatoria", boton))
         {
-            semilla = Random.Range(0, 1000);
+            textoSemilla = Random.Range(0, 1000).ToString();
         }
 
         y += 44f;
@@ -245,6 +267,42 @@ public class Menu3D : MonoBehaviour
         {
             Iniciar();
         }
+
+        if (!string.IsNullOrEmpty(aviso) && Time.unscaledTime < avisoHasta)
+        {
+            GUI.Label(new Rect(x, y + 50f, ancho - 48f, 24f), aviso, centrado);
+        }
+    }
+
+    /// <summary>Campo de texto que solo acepta digitos.</summary>
+    private string CampoNumero(Rect rect, string texto, int maximoDigitos)
+    {
+        string escrito = GUI.TextField(rect, texto ?? string.Empty, maximoDigitos, boton);
+        string soloDigitos = string.Empty;
+
+        foreach (char caracter in escrito)
+        {
+            if (char.IsDigit(caracter))
+            {
+                soloDigitos += caracter;
+            }
+        }
+
+        return soloDigitos;
+    }
+
+    private int Obstaculos()
+    {
+        return int.TryParse(textoObstaculos, out int valor)
+            ? Mathf.Clamp(valor, 0, 300)
+            : 0;
+    }
+
+    private int Semilla()
+    {
+        return int.TryParse(textoSemilla, out int valor)
+            ? Mathf.Clamp(valor, 0, 999)
+            : 3;
     }
 
     /// <summary>Selector [-] valor [+] que modifica una variable.</summary>
