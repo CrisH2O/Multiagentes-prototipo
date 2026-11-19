@@ -8,6 +8,8 @@ Nada aquí altera la simulación: son conversiones para *reportar* resultados.
 """
 from __future__ import annotations
 
+import math
+
 # ---------------------------------------------------------------------------
 # Geometría: la celda es el ancho de trabajo de la sembradora
 # ---------------------------------------------------------------------------
@@ -16,6 +18,18 @@ LADO_CELDA_M = 9.0
 AREA_CELDA_M2 = LADO_CELDA_M ** 2          # 81 m²
 M2_POR_HECTAREA = 10_000.0
 CELDAS_POR_HECTAREA = M2_POR_HECTAREA / AREA_CELDA_M2   # ≈ 123.46
+
+# Ancho real de trabajo de la sembradora (12 surcos x 0.76 m).
+# Una pasada cubre 9.12 m; en una hectarea (100 x 100 m) caben
+# 100 / 9.12 ≈ 11 pasadas de 100 m.
+ANCHO_SEMBRADORA_M = 9.12
+PASADAS_POR_HECTAREA = math.ceil(100.0 / ANCHO_SEMBRADORA_M)   # 11
+
+
+def pasadas_por_celda(lado_celda_m: float = LADO_CELDA_M,
+                      ancho_sembradora_m: float = ANCHO_SEMBRADORA_M) -> int:
+    """Cuantas pasadas de la sembradora necesita una celda cuadrada."""
+    return math.ceil(lado_celda_m / ancho_sembradora_m)
 
 # ---------------------------------------------------------------------------
 # Semilla de maíz
@@ -40,9 +54,10 @@ EFICIENCIA_CAMPO = 0.85             # fracción del tiempo teórico que es efect
 # ---------------------------------------------------------------------------
 # Conversiones
 # ---------------------------------------------------------------------------
-def hectareas(celdas: int | float) -> float:
-    """Hectáreas que ocupan N celdas (de 9 m de lado)."""
-    return celdas * AREA_CELDA_M2 / M2_POR_HECTAREA
+def hectareas(celdas: int | float,
+              lado_celda_m: float = LADO_CELDA_M) -> float:
+    """Hectáreas que ocupan N celdas del lado indicado."""
+    return celdas * (lado_celda_m ** 2) / M2_POR_HECTAREA
 
 
 def celdas_por_hectarea() -> float:
@@ -87,10 +102,11 @@ def costo_combustible_por_hectarea(velocidad_kmh: float = VELOCIDAD_KMH,
     return litros_por_hectarea(velocidad_kmh) * precio_litro
 
 
-def segundos_por_tick(velocidad_kmh: float = VELOCIDAD_KMH) -> float:
-    """Tiempo real que representa avanzar una celda (9 m) en un tick."""
+def segundos_por_tick(velocidad_kmh: float = VELOCIDAD_KMH,
+                      lado_celda_m: float = LADO_CELDA_M) -> float:
+    """Tiempo real que representa avanzar una celda en un tick."""
     metros_por_segundo = velocidad_kmh * 1000.0 / 3600.0
-    return LADO_CELDA_M / metros_por_segundo
+    return lado_celda_m / metros_por_segundo
 
 
 def horas_de_ticks(ticks: float, velocidad_kmh: float = VELOCIDAD_KMH) -> float:
@@ -109,13 +125,14 @@ def hectareas_por_hora(velocidad_kmh: float = VELOCIDAD_KMH,
 # ---------------------------------------------------------------------------
 # Preset calibrado para experimentos "realistas"
 # ---------------------------------------------------------------------------
-def preset_realista(n_celdas: int = 20) -> dict:
+def preset_realista(n_celdas: int = 20,
+                    lado_celda_m: float = LADO_CELDA_M) -> dict:
     """Parámetros del modelo expresados en magnitudes de campo.
 
     Devuelve el tanque y el consumo equivalentes a un costal real de semilla,
     para usarlos en ``escenarios.construir_payload``.
     """
-    area = hectareas(n_celdas * n_celdas)
+    area = hectareas(n_celdas * n_celdas, lado_celda_m)
     return {
         "hectareas": round(area, 3),
         "costales_equivalentes": round(area * costales_por_hectarea(), 2),
@@ -159,28 +176,34 @@ COSTO_SEMILLA_POR_CELDA = COSTO_COSTAL_MXN / CELDAS_POR_HECTAREA  # ≈ $12.15
 
 
 def salario_por_tick(salario_hora: float = SALARIO_HORA_MXN,
-                     velocidad_kmh: float = VELOCIDAD_KMH) -> float:
-    """Costo de mano de obra que corresponde a un tick (≈ 5.4 s)."""
-    horas_por_tick = segundos_por_tick(velocidad_kmh) / 3600.0
+                     velocidad_kmh: float = VELOCIDAD_KMH,
+                     lado_celda_m: float = LADO_CELDA_M) -> float:
+    """Costo de mano de obra que corresponde a un tick."""
+    horas_por_tick = segundos_por_tick(velocidad_kmh, lado_celda_m) / 3600.0
     return salario_hora * horas_por_tick
 
 
 def parametros_calibrados(costales_por_tanque: float = COSTALES_POR_TANQUE,
                           tanque_litros: float = TANQUE_DIESEL_L,
                           salario_hora: float = SALARIO_HORA_MXN,
-                          precio_litro: float = PRECIO_DIESEL_MXN_L) -> dict:
+                          precio_litro: float = PRECIO_DIESEL_MXN_L,
+                          lado_celda_m: float = LADO_CELDA_M) -> dict:
     """Parámetros del modelo expresados en magnitudes de campo.
 
-    1 unidad de semilla del modelo = 1 celda sembrada. Por eso un tanque de
-    un costal son ~123 unidades, no 60,000 semillas.
+    1 unidad de semilla del modelo = 1 celda sembrada. El tamaño de la celda
+    se puede cambiar (por ejemplo 25 m para un campo de 100 ha) sin romper
+    la calibración: todo se deriva del área de la celda.
     """
+    celdas_por_ha = M2_POR_HECTAREA / (lado_celda_m ** 2)
+
     return {
-        "max_seeds": int(round(costales_por_tanque * CELDAS_POR_HECTAREA)),
+        "max_seeds": int(round(costales_por_tanque * celdas_por_ha)),
         "max_fuel": float(tanque_litros),
-        "fuel_por_paso": LITROS_POR_CELDA,
+        "fuel_por_paso": LITROS_POR_HA / celdas_por_ha,
         "cost_per_seed": round(costales_por_tanque * COSTO_COSTAL_MXN
-                               / (costales_por_tanque * CELDAS_POR_HECTAREA), 4),
-        "wage_per_tick": round(salario_por_tick(salario_hora), 5),
+                               / (costales_por_tanque * celdas_por_ha), 4),
+        "wage_per_tick": round(
+            salario_por_tick(salario_hora, lado_celda_m=lado_celda_m), 5),
         "precio_litro": float(precio_litro),
         "costales_por_tanque": costales_por_tanque,
     }

@@ -177,7 +177,8 @@ def construir_payload(terreno: str = "plano", n: int = GRID_POR_DEFECTO,
                       tanque_litros: float = unidades.TANQUE_DIESEL_L,
                       salario_hora: float = unidades.SALARIO_HORA_MXN,
                       steps: int = 2000,
-                      depot: tuple[int, int] = (0, 0)) -> dict:
+                      depot: tuple[int, int] = (0, 0),
+                      lado_celda_m: float | None = None) -> dict:
     """Payload del servidor con parámetros en magnitudes de campo.
 
     ``costales`` es la capacidad del tanque expresada en costales de 20 kg:
@@ -195,6 +196,7 @@ def construir_payload(terreno: str = "plano", n: int = GRID_POR_DEFECTO,
         costales_por_tanque=costales,
         tanque_litros=tanque_litros,
         salario_hora=salario_hora,
+        **({"lado_celda_m": lado_celda_m} if lado_celda_m else {}),
     )
 
     return {
