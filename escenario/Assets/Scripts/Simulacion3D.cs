@@ -94,6 +94,11 @@ public class Simulacion3D : MonoBehaviour
     public Transform contenedorTractores;
     public Transform contenedorCeldas;
 
+    [Header("SELECCION DEL MENU")]
+    public string terrenoElegido = "colinas";
+    public int agentesElegidos = 3;
+    public string estrategiaElegida = "greedy";
+
     [Header("CAMPO")]
     public float hectareasCampo = 100f;
     public float anchoSembradora = 9.12f;
@@ -133,6 +138,12 @@ public class Simulacion3D : MonoBehaviour
 
     // Capa del terreno donde se pinta lo sembrado (0=pasto, 1=tierra, 2=sembrado)
     private const int CapaSembrado = 2;
+    private Terrain terrenoBase;
+
+    // Mapa base (sin sembrar) de cada terreno, para poder limpiar la siembra
+    // aunque se cambie de terreno y se vuelva a simular.
+    private static readonly Dictionary<TerrainData, float[,,]> bases =
+        new Dictionary<TerrainData, float[,,]>();
     private float[,,] alfaTerreno;
     private float[,,] alfaBase;
     private float siguienteVolcado;
@@ -221,7 +232,17 @@ public class Simulacion3D : MonoBehaviour
 
         if (iniciarAlComenzar)
         {
-            Iniciar();
+            var menu = UnityEngine.Object.FindFirstObjectByType<Menu3D>();
+
+            if (menu != null)
+            {
+                StopAllCoroutines();
+                menu.Mostrar();
+            }
+            else
+            {
+                Iniciar();
+            }
         }
     }
 
@@ -272,6 +293,15 @@ public class Simulacion3D : MonoBehaviour
         }
 
         indiceEscala = (indiceEscala + 1) % escalasTiempo.Length;
+    }
+
+    /// <summary>Arranca la simulacion con lo elegido en el menu.</summary>
+    public void IniciarCon(string terreno, int agentes, string estrategia)
+    {
+        terrenoElegido = terreno;
+        agentesElegidos = Mathf.Clamp(agentes, 1, 4);
+        estrategiaElegida = estrategia;
+        Iniciar();
     }
 
     public void Iniciar()
@@ -386,6 +416,42 @@ public class Simulacion3D : MonoBehaviour
     // PREPARACION
     // =====================================================================
 
+    private void ReiniciarEstado()
+    {
+        mensajeError = null;
+        terminado = false;
+        tickVisible = 0;
+        respuesta = null;
+        conectando = true;
+        estado = "Preparando...";
+
+        rutas.Clear();
+        tractores.Clear();
+        celdasMarcadas.Clear();
+
+        // Borrar la siembra que quedo pintada del intento anterior
+        PrepararAlphamap();
+        VolcarAlphamap();
+    }
+
+    private IEnumerator EnviarGet(string url, Action<string, string> callback)
+    {
+        using (UnityWebRequest peticion = UnityWebRequest.Get(url))
+        {
+            peticion.timeout = 30;
+            yield return peticion.SendWebRequest();
+
+            if (peticion.result == UnityWebRequest.Result.Success)
+            {
+                callback(peticion.downloadHandler.text, null);
+            }
+            else
+            {
+                callback(null, peticion.error);
+            }
+        }
+    }
+
     private void PrepararEscena()
     {
         rutas.Clear();
@@ -403,7 +469,24 @@ public class Simulacion3D : MonoBehaviour
                 RutaDeAgente(respuesta, i, terreno, TamanoGrilla())
             ));
 
-            tractores.Add(ObtenerTractor(i));
+            Transform tractor = ObtenerTractor(i);
+
+            if (tractor != null && !tractor.gameObject.activeSelf)
+            {
+                tractor.gameObject.SetActive(true);
+            }
+
+            tractores.Add(tractor);
+        }
+
+        for (int i = agentes; i < 6; i++)
+        {
+            var sobrante = GameObject.Find("Tractor_" + (i + 1).ToString("D2"));
+
+            if (sobrante != null)
+            {
+                sobrante.SetActive(false);
+            }
         }
 
         estado = "Reproduciendo " + respuesta.frames.Length + " ticks";
@@ -612,12 +695,15 @@ public class Simulacion3D : MonoBehaviour
             return;
         }
 
-        if (alfaBase == null)
+        if (!bases.ContainsKey(datos))
         {
-            alfaBase = datos.GetAlphamaps(
+            bases[datos] = datos.GetAlphamaps(
                 0, 0, datos.alphamapResolution, datos.alphamapResolution
             );
         }
+
+        terrenoBase = terreno;
+        alfaBase = bases[datos];
 
         alfaTerreno = (float[,,])alfaBase.Clone();
         siguienteVolcado = 0f;
@@ -914,9 +1000,27 @@ public class Simulacion3D : MonoBehaviour
                 Mathf.Clamp(tickVisible, 0, total - 1)
             ].remaining_cells;
 
+            float ladoCelda = terreno != null && terreno.terrainData != null
+                ? terreno.terrainData.size.x / Mathf.Max(1, grilla)
+                : 25f;
+
+            float hectareasPorCelda = ladoCelda * ladoCelda / 10000f;
+            float porcentajeCampo = 100f * sembradas /
+                                    Mathf.Max(1, grilla * grilla);
+
             texto.AppendLine("Tick: " + tickVisible + " / " + (total - 1));
-            texto.AppendLine("Celdas sembradas: " + sembradas);
-            texto.AppendLine("Celdas restantes: " + restantes);
+            texto.AppendLine(
+                "Sembrado: " + (sembradas * hectareasPorCelda).ToString("F1") +
+                " ha (" + porcentajeCampo.ToString("F0") + "%)"
+            );
+            texto.AppendLine(
+                "Faltan: " + (restantes * hectareasPorCelda).ToString("F1") + " ha"
+            );
+            texto.AppendLine(
+                "Celda: " + ladoCelda.ToString("F0") + "x" +
+                ladoCelda.ToString("F0") + " m = " +
+                hectareasPorCelda.ToString("F4") + " ha"
+            );
             texto.AppendLine("Agentes: " + tractores.Count);
             texto.AppendLine(
                 "Velocidad: 1:" + EscalaActual +
@@ -933,7 +1037,8 @@ public class Simulacion3D : MonoBehaviour
             texto.AppendLine("Campo: " + hectareasCampo.ToString("F0") + " ha");
             texto.AppendLine(
                 "Sembradora: " + anchoSembradora.ToString("F2") + " m" +
-                " | " + Mathf.CeilToInt(100f / anchoSembradora) + " pasadas/ha"
+                " = " + (100f * anchoSembradora / ladoCelda).ToString("F0") +
+                "% del ancho de una celda por pasada"
             );
         }
 
@@ -965,9 +1070,19 @@ public class Simulacion3D : MonoBehaviour
         if ((terminado || !string.IsNullOrEmpty(mensajeError) || !conectando) &&
             GUI.Button(
                 new Rect(rect.x, rect.y + rect.height + 6f, rect.width, 26f),
-                "Volver a simular"))
+                "Volver al menú"))
         {
-            Iniciar();
+            var menu = UnityEngine.Object.FindFirstObjectByType<Menu3D>();
+
+            if (menu != null)
+            {
+                StopAllCoroutines();
+                menu.Mostrar();
+            }
+            else
+            {
+                Iniciar();
+            }
         }
     }
 }

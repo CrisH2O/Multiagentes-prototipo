@@ -109,8 +109,8 @@ def _suavizar(matriz: np.ndarray, pasadas: int = 3) -> np.ndarray:
     return salida
 
 
-def generar_mapa_alturas() -> np.ndarray:
-    elevacion = escenarios.generar_elevacion(TERRENO, CUADRICULA, SEMILLA)
+def generar_mapa_alturas(terreno: str = TERRENO) -> np.ndarray:
+    elevacion = escenarios.generar_elevacion(terreno, CUADRICULA, SEMILLA)
     base = _suavizar(_remuestrear_bilineal(elevacion, RESOLUCION), pasadas=2)
 
     rng = np.random.default_rng(SEMILLA + 100)
@@ -456,8 +456,11 @@ def main() -> None:
     MODELOS.mkdir(parents=True, exist_ok=True)
     STREAMING.mkdir(parents=True, exist_ok=True)
 
+    for nombre_terreno in ("plano", "colinas", "montanoso"):
+        alturas = generar_mapa_alturas(nombre_terreno)
+        guardar_alturas(alturas, TEXTURAS / f"heightmap_{nombre_terreno}.png")
+
     alturas = generar_mapa_alturas()
-    guardar_alturas(alturas, TEXTURAS / "heightmap_colinas.png")
     print(f"heightmap: {RESOLUCION}x{RESOLUCION}  "
           f"min={alturas.min():.3f} max={alturas.max():.3f}")
 

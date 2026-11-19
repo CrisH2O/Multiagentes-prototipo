@@ -5,7 +5,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import sys
 import threading
+from urllib.parse import parse_qs, urlparse
 
+import escenarios
 import unidades
 
 
@@ -446,6 +448,32 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
         self.respond(200, {})
 
     def do_GET(self):
+        ruta = urlparse(self.path)
+
+        if ruta.path == "/payload":
+            try:
+                consulta = parse_qs(ruta.query)
+                terreno = consulta.get("terreno", ["colinas"])[0]
+                agentes = int(consulta.get("agentes", ["3"])[0])
+                estrategia = consulta.get("estrategia", ["greedy"])[0]
+                costales = float(consulta.get("costales", ["16"])[0])
+
+                payload = escenarios.construir_payload(
+                    terreno=terreno,
+                    n=40,
+                    n_agentes=agentes,
+                    obstaculos=140,
+                    semilla=3,
+                    costales=costales,
+                    estrategia=estrategia,
+                    steps=6000,
+                    lado_celda_m=25.0,
+                )
+                self.respond(200, payload)
+            except (ValueError, KeyError) as error:
+                self.respond(400, {"status": "error", "message": str(error)})
+            return
+
         if self.path.startswith("/pending_config"):
             with CONFIG_LOCK:
                 config = PENDING_UNITY_CONFIG

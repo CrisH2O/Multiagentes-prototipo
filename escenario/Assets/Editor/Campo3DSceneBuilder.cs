@@ -106,7 +106,22 @@ public static class Campo3DSceneBuilder
         Transform iluminacion = new GameObject("ILUMINACION").transform;
         Transform camaras = new GameObject("CAMARAS").transform;
 
-        terreno = CrearTerreno(escenario);
+        Terrain terrenoPlano = CrearTerreno(
+            escenario, "Plano", "Assets/Texturas/heightmap_plano.png",
+            "Assets/Terreno/TerrenoPlano.asset"
+        );
+
+        Terrain terrenoColinas = CrearTerreno(
+            escenario, "Colinas", "Assets/Texturas/heightmap_colinas.png",
+            "Assets/Terreno/TerrenoColinas.asset"
+        );
+
+        Terrain terrenoMontanoso = CrearTerreno(
+            escenario, "Montañoso", "Assets/Texturas/heightmap_montanoso.png",
+            "Assets/Terreno/TerrenoMontanoso.asset"
+        );
+
+        terreno = terrenoColinas;
 
         if (terreno == null)
         {
@@ -160,8 +175,13 @@ public static class Campo3DSceneBuilder
 
         ConfigurarAmbiente();
         CrearPostProceso();
-        CrearSimulacion(
+        var simulacion = CrearSimulacion(
             escenario, objetos, terreno, prefabTractor, prefabCelda
+        );
+
+        CrearMenu(
+            escenario, simulacion,
+            new[] { terrenoPlano, terrenoColinas, terrenoMontanoso }
         );
 
         EditorSceneManager.MarkSceneDirty(escena);
@@ -253,8 +273,13 @@ public static class Campo3DSceneBuilder
     private static void ConfigurarImportaciones()
     {
         // Heightmap: es DATO, no color. Sin compresion para no deformar alturas.
-        ConfigurarTextura(RutaHeightmap, sRGB: false, repetir: false, legible: true,
-            sinCompresion: true);
+        foreach (string nombre in new[] { "plano", "colinas", "montanoso" })
+        {
+            ConfigurarTextura(
+                "Assets/Texturas/heightmap_" + nombre + ".png",
+                sRGB: false, repetir: false, legible: true, sinCompresion: true
+            );
+        }
 
         ConfigurarTextura(RutaTexturaCesped, sRGB: true, repetir: true, legible: false,
             sinCompresion: false);
@@ -564,13 +589,15 @@ public static class Campo3DSceneBuilder
     /// heightmap. El PNG lo genera el script de Python con la misma
     /// elevacion que usa el modelo multiagente.
     /// </summary>
-    private static Terrain CrearTerreno(Transform padre)
+    private static Terrain CrearTerreno(
+        Transform padre, string nombre, string rutaPng, string rutaAsset
+    )
     {
-        var textura = AssetDatabase.LoadAssetAtPath<Texture2D>(RutaHeightmap);
+        var textura = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaPng);
 
         if (textura == null)
         {
-            Debug.LogError("[Campo3D] No existe " + RutaHeightmap);
+            Debug.LogError("[Campo3D] No existe " + rutaPng);
             return null;
         }
 
@@ -601,7 +628,7 @@ public static class Campo3DSceneBuilder
         // El TerrainData debe ser un asset ANTES de asignar capas, si no
         // Unity pierde los mapas alfa (la capa de tierra no se veria).
         CrearCarpeta("Assets", "Terreno");
-        AssetDatabase.CreateAsset(datos, RutaDatosTerreno);
+        AssetDatabase.CreateAsset(datos, rutaAsset);
 
         datos.SetHeights(0, 0, alturas);
 
@@ -619,7 +646,8 @@ public static class Campo3DSceneBuilder
         AssetDatabase.SaveAssets();
 
         var terrenoGO = Terrain.CreateTerrainGameObject(datos);
-        terrenoGO.name = "Terreno";
+        terrenoGO.name = "Terreno_" + nombre;
+        terrenoGO.SetActive(nombre == "Colinas");
         terrenoGO.transform.SetParent(padre, false);
 
         // El Terrain se ancla en su esquina: se centra en el origen para que
@@ -1135,7 +1163,7 @@ public static class Campo3DSceneBuilder
     /// Objeto con el componente que se conecta al servidor Python y
     /// reproduce la simulacion sobre el terreno.
     /// </summary>
-    private static void CrearSimulacion(
+    private static Simulacion3D CrearSimulacion(
         Transform escenario,
         Transform objetos,
         Terrain terreno,
@@ -1159,7 +1187,25 @@ public static class Campo3DSceneBuilder
         simulacion.anchoSembradora = 9.12f;
         simulacion.segundosRealesPorTick = 41f;
         simulacion.escalaInicial = 2;
-        simulacion.iniciarAlComenzar = true;
+        simulacion.iniciarAlComenzar = false;
+
+        return simulacion;
+    }
+
+    /// <summary>
+    /// Menu inicial: elige terreno, numero de tractores y estrategia, igual
+    /// que el menu de la version 2D.
+    /// </summary>
+    private static void CrearMenu(
+        Transform escenario, Simulacion3D simulacion, Terrain[] terrenos
+    )
+    {
+        var go = new GameObject("MENU");
+        go.transform.SetParent(escenario, false);
+
+        var menu = go.AddComponent<Menu3D>();
+        menu.simulacion = simulacion;
+        menu.terrenos = terrenos;
     }
 
     /// <summary>

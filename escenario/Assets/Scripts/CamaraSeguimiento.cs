@@ -226,9 +226,20 @@ public class CamaraSeguimiento : MonoBehaviour
 
         y += 24f;
 
+        float ladoCelda = 25f;
+
+        if (simulacion != null && simulacion.terreno != null &&
+            simulacion.terreno.terrainData != null)
+        {
+            ladoCelda = simulacion.terreno.terrainData.size.x /
+                        Mathf.Max(1, simulacion.TamanoGrilla());
+        }
+
+        float hectareas = agente.planted_total * ladoCelda * ladoCelda / 10000f;
+
         GUI.Label(
             new Rect(x, y, 300f, 20f),
-            "Sembradas: " + agente.planted_total + " celdas"
+            "Sembradas: " + hectareas.ToString("F1") + " ha"
         );
 
         y += 22f;
