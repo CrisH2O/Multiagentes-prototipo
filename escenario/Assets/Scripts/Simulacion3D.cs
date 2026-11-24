@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -85,7 +86,7 @@ public class Respuesta3D
 public class Simulacion3D : MonoBehaviour
 {
     [Header("SERVIDOR PYTHON")]
-    public string serverUrl = "http://127.0.0.1:5000/simulate";
+    public string serverUrl = "http://127.0.0.1:5057/simulate";
     public string archivoPayload = "payload_colinas.json";
 
     [Header("ESCENA")]
@@ -389,6 +390,30 @@ public class Simulacion3D : MonoBehaviour
         {
             for (int intento = 0; intento < 20 && string.IsNullOrEmpty(json); intento++)
             {
+                // Si el proceso murio al arrancar, mostramos por que
+                if (servidor != null && servidor.HasExited)
+                {
+                    string salida = null;
+
+                    try
+                    {
+                        salida = servidor.StandardError.ReadToEnd();
+                    }
+                    catch (Exception)
+                    {
+                        salida = null;
+                    }
+
+                    Debug.LogError(
+                        "[Simulacion3D] El servidor Python se cerro al arrancar.\n" +
+                        (string.IsNullOrEmpty(salida)
+                            ? "Sin salida de error (revisa el puerto 5057)."
+                            : salida)
+                    );
+
+                    break;
+                }
+
                 yield return new WaitForSeconds(0.5f);
                 yield return Enviar(payload, (resultado, fallo) =>
                 {
@@ -1038,11 +1063,39 @@ public class Simulacion3D : MonoBehaviour
     /// Solo en el editor: arranca Agentes/agentesPrueba.py si no esta activo.
     /// En el ejecutable hay que arrancar el servidor a mano.
     /// </summary>
-    private static bool IntentarArrancarServidor()
+    /// <summary>Pregunta si ya hay un servidor sano en la URL configurada.</summary>
+    private bool ServidorYaResponde()
+    {
+        try
+        {
+            string baseUrl = serverUrl.Replace("/simulate", "/");
+            var peticion = (HttpWebRequest)WebRequest.Create(baseUrl);
+            peticion.Timeout = 800;
+            peticion.ReadWriteTimeout = 800;
+
+            using (var respuesta = (HttpWebResponse)peticion.GetResponse())
+            using (var lector = new StreamReader(respuesta.GetResponseStream()))
+            {
+                return lector.ReadToEnd().Contains("Servidor activo");
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IntentarArrancarServidor()
     {
         try
         {
             if (servidor != null && !servidor.HasExited)
+            {
+                return true;
+            }
+
+            // Si ya hay un servidor sano escuchando, no lanzamos otro
+            if (ServidorYaResponde())
             {
                 return true;
             }

@@ -23,13 +23,17 @@ if [ ! -d "$APP" ]; then
     exit 1
 fi
 
+# Matar instancias viejas del servidor (evita el puerto ocupado)
+pkill -f "Agentes/agentesPrueba.py" 2>/dev/null
+sleep 1
+
 echo "Iniciando servidor Python..."
 "$PYTHON" "$SERVIDOR_PY" >"$LOG" 2>&1 &
 SERVIDOR=$!
 
 # Esperar a que el puerto responda (maximo 15 s)
 for _ in $(seq 1 30); do
-    if curl -s -m 1 http://127.0.0.1:5000/ >/dev/null 2>&1; then
+    if curl -s -m 1 http://127.0.0.1:5057/ >/dev/null 2>&1; then
         break
     fi
     sleep 0.5

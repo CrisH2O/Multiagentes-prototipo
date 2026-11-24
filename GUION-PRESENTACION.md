@@ -13,7 +13,7 @@ Todo lo que se muestra está en `escenario/Builds/Campo3D.app` y en la escena
    cd Multiagentes-prototipo
    .venv/bin/python Agentes/agentesPrueba.py
    ```
-   Debe decir: `Servidor Python activo en http://127.0.0.1:5000/simulate`.
+   Debe decir: `Servidor Python activo en http://127.0.0.1:5057/simulate`.
 2. Abrir el ejecutable: `open escenario/Builds/Campo3D.app` (o doble clic en
    `iniciar_campo3d.command`, que hace las dos cosas).
 3. Verificar que aparece el **menú** y que el juego responde (probar una vez con
@@ -210,7 +210,7 @@ restante es la celda del depósito, donde arrancan y recargan los tractores."
 
 ## 7. Plan B si algo falla
 
-- **No arranca el servidor**: revisar que el puerto 5000 esté libre
+- **No arranca el servidor**: revisar que el puerto 5057 esté libre
   (`lsof -iTCP:5000 -sTCP:LISTEN`); a veces macOS lo ocupa con AirPlay.
 - **La app no simula**: ejecutar `iniciar_campo3d.command` (levanta servidor + app).
 - **Falla el proyector**: usar las capturas de `escenario/Previews/`

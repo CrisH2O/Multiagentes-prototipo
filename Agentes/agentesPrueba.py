@@ -6,6 +6,7 @@ import json
 import sys
 import threading
 import time
+import traceback
 from urllib.parse import parse_qs, urlparse
 
 import escenarios
@@ -456,6 +457,22 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def handle_one_request(self):
+        """Nunca cerrar la conexion sin respuesta: si el handler falla,
+        se devuelve un 500 con el mensaje en vez de una respuesta vacia."""
+        try:
+            super().handle_one_request()
+        except Exception as error:
+            traceback.print_exc()
+
+            try:
+                self.respond(500, {
+                    "status": "error",
+                    "message": f"{type(error).__name__}: {error}",
+                })
+            except Exception:
+                pass
+
     def do_OPTIONS(self):
         self.respond(200, {})
 
@@ -523,8 +540,14 @@ class SimulationHTTPRequestHandler(BaseHTTPRequestHandler):
             super().log_message(format_string, *args)
 
 
-def start_server(host="127.0.0.1", port=5000):
-    server = ThreadingHTTPServer((host, port), SimulationHTTPRequestHandler)
+def start_server(host="127.0.0.1", port=5057):
+    try:
+        server = ThreadingHTTPServer((host, port), SimulationHTTPRequestHandler)
+    except OSError as error:
+        print(f"No se pudo abrir {host}:{port} -> {error}")
+        print("El puerto puede estar ocupado por AirPlay (ControlCenter) o por")
+        print("una instancia anterior. Cierra la otra instancia y reintenta.")
+        raise SystemExit(1)
     print(f"Servidor Python activo en http://{host}:{port}/simulate")
     try:
         server.serve_forever()

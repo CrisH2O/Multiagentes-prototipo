@@ -29,7 +29,7 @@ cd Multiagentes-prototipo
 .venv/bin/python Agentes/agentesPrueba.py
 ```
 
-Queda escuchando en `http://127.0.0.1:5000` con dos rutas:
+Queda escuchando en `http://127.0.0.1:5057` con dos rutas:
 
 | Ruta | Método | Para qué |
 |---|---|---|
@@ -238,9 +238,9 @@ La cámara usa el **renderer 3D** del pipeline (`UniversalRendererData` en
 comunicación es por **HTTP local**:
 
 1. Unity pide a Python el payload según el menú:
-   `GET http://127.0.0.1:5000/payload?terreno=colinas&agentes=3&estrategia=greedy`
+   `GET http://127.0.0.1:5057/payload?terreno=colinas&agentes=3&estrategia=greedy`
 2. Unity envía ese payload a:
-   `POST http://127.0.0.1:5000/simulate` (con `UnityWebRequest` y `Content-Type: application/json`).
+   `POST http://127.0.0.1:5057/simulate` (con `UnityWebRequest` y `Content-Type: application/json`).
 3. Python responde **todos los fotogramas** de la corrida (710 en el escenario por defecto).
 4. Unity los reproduce.
 
@@ -254,8 +254,8 @@ Si el servidor no está arriba en el editor, `Simulacion3D` intenta **arrancarlo
 - Prueba rápida sin Unity:
 
 ```bash
-curl "http://127.0.0.1:5000/payload?terreno=colinas&agentes=3&estrategia=greedy"
-curl -X POST http://127.0.0.1:5000/simulate -H "Content-Type: application/json" \
+curl "http://127.0.0.1:5057/payload?terreno=colinas&agentes=3&estrategia=greedy"
+curl -X POST http://127.0.0.1:5057/simulate -H "Content-Type: application/json" \
      -d @escenario/Assets/StreamingAssets/payload_colinas.json
 ```
 

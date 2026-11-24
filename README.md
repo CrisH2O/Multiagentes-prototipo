@@ -152,7 +152,7 @@ uv sync
 cd Agentes && ../.venv/bin/python -m pytest -q
 
 # Simulación rápida en terminal
-../.venv/bin/python agentesPrueba.py        # levanta el servidor en :5000
+../.venv/bin/python agentesPrueba.py        # levanta el servidor en :5057
 ```
 
 ### Experimentos (genera los datos del análisis)
